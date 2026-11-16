@@ -6,6 +6,7 @@ import "@fontsource/inter/600.css";
 import "./style.css";
 import { api } from "./api";
 import { Suppliers } from "./suppliers";
+import { Criteria } from "./criteria";
 type Project = {
   id: string;
   reference: string;
@@ -51,6 +52,8 @@ function App() {
     detail = route.startsWith("/projects/"),
     formView = fresh || detail;
   const supplierView = detail && route.endsWith("/suppliers");
+  const criteriaView = detail && route.endsWith("/criteria");
+  const stage = criteriaView ? 2 : supplierView ? 1 : 0;
   function go(path: string) {
     location.hash = path;
   }
@@ -200,12 +203,12 @@ function App() {
               </button>
               <h1>
                 {detail
-                  ? supplierView ? "Add Suppliers" : "Purchasing Project Details"
+                  ? criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
                   : "Create Purchasing Project"}
               </h1>
               <p className="subtitle">
                 {detail
-                  ? supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
+                  ? criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
                   : "Set up the basic details for your purchasing project to get started."}
               </p>
               <div className="stepper">
@@ -215,11 +218,11 @@ function App() {
                   "Criteria & Weights",
                   "Evaluate & Decide",
                 ].map((v, i) => (
-                  <div className={i === (supplierView ? 1 : 0) ? "current" : ""} key={v}>
+                  <div className={i === stage ? "current" : ""} key={v}>
                     <b>{i + 1}</b>
                     <span>
                       {i + 1}. {v}
-                      <small>{i === (supplierView ? 1 : 0) ? "Active" : supplierView && i === 0 ? "Completed" : "Upcoming"}</small>
+                      <small>{i === stage ? "Active" : i < stage ? "Completed" : "Upcoming"}</small>
                     </span>
                   </div>
                 ))}
@@ -253,6 +256,8 @@ function App() {
           )}
           {loading ? (
             <p role="status">Loading projects…</p>
+          ) : criteriaView && project ? (
+            <Criteria key={project.id} projectId={project.id} />
           ) : supplierView && project ? (
             <Suppliers key={project.id} projectId={project.id} reference={project.reference} />
           ) : formView ? (

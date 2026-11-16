@@ -621,3 +621,12 @@ dialog::backdrop { background:#0006; }
 .dialog-body small,.dialog-body p { color:#565d79; font-size:11px; }
 .dialog-footer { border-top:1px solid #e5e9f4; }
 @media(max-width:700px) { .supplier-footer {flex-direction:column;} .supplier-page .card-heading {align-items:flex-start; gap:12px;} }
+.criteria-grid {display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;margin-bottom:24px}
+.criterion-editor h2,.mandatory-settings h2 {margin-top:0}
+.criterion-editor label,.mandatory-settings label {display:block;margin-top:16px}
+.criteria-range {display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.criteria-page input[type=checkbox] {width:18px;height:18px;accent-color:#2563eb}
+.criteria-page .inline-check {display:flex;align-items:center;gap:10px}
+.mandatory-row {display:grid;grid-template-columns:1fr 2fr auto;gap:16px;align-items:end;margin-bottom:16px}
+.criteria-page .table-card > button {margin:16px}
+@media(max-width:900px){.criteria-grid,.mandatory-row{grid-template-columns:1fr}}

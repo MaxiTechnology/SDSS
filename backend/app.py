@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import database
 import psycopg
 
@@ -210,3 +210,105 @@ def supplier_readiness(project_id: UUID):
     if count < 2:
         raise HTTPException(422,"Add at least two suppliers before continuing to Criteria & Weights.")
     return {"ready":True,"supplier_count":count}
+
+
+class ScoringCriterion(BaseModel):
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
+    name: str = Field(min_length=1, max_length=100)
+    unit: str = Field(min_length=1, max_length=40)
+    direction: Literal["benefit", "cost"]
+    selected: bool = True
+    minimum: Decimal | None = Field(default=None, allow_inf_nan=False)
+    maximum: Decimal | None = Field(default=None, allow_inf_nan=False)
+
+    @field_validator("name", "unit", mode="before")
+    @classmethod
+    def trim(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def valid_range(self):
+        if self.minimum is not None and self.maximum is not None and self.minimum >= self.maximum:
+            raise ValueError("Minimum must be less than maximum.")
+        return self
+
+
+class MandatoryCheck(BaseModel):
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
+    name: str = Field(min_length=1, max_length=100)
+    requirement: str = Field(min_length=1, max_length=500)
+
+    @field_validator("name", "requirement", mode="before")
+    @classmethod
+    def trim(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class CriteriaConfiguration(BaseModel):
+    criteria: list[ScoringCriterion] = Field(min_length=2, max_length=20)
+    mandatory_checks: list[MandatoryCheck] = Field(default_factory=list, max_length=20)
+    maximum_price: Decimal | None = Field(default=None, ge=0, max_digits=16, decimal_places=2, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def distinct(self):
+        if sum(c.selected for c in self.criteria) < 2:
+            raise ValueError("Select at least two scoring criteria.")
+        all_items = [*self.criteria, *self.mandatory_checks]
+        if len({c.id for c in all_items}) != len(all_items):
+            raise ValueError("Criterion and check identifiers must be unique.")
+        if len({c.name.casefold() for c in all_items}) != len(all_items):
+            raise ValueError("Criterion and check names must be unique.")
+        return self
+
+
+class CriteriaSave(CriteriaConfiguration):
+    expected_revision: int = Field(ge=0)
+
+
+def default_criteria(currency):
+    definitions = [
+        ("price", "Price / Total Purchasing Cost", currency, "cost", "0", None),
+        ("quality", "Product or Service Quality", "points / 100", "benefit", "0", "100"),
+        ("delivery", "Delivery Time", "days", "cost", "0", None),
+        ("reliability", "Supplier Reliability", "points / 5", "benefit", "0", "5"),
+        ("warranty", "Warranty", "months", "benefit", "0", None),
+    ]
+    return {"criteria": [dict(id=i,name=n,unit=u,direction=d,minimum=lo,maximum=hi,selected=True)
+            for i,n,u,d,lo,hi in definitions], "mandatory_checks": [], "maximum_price": None}
+
+
+def criteria_project(connection, project_id):
+    require_project(connection, project_id)
+    count = connection.execute("SELECT count(*) AS total FROM project_suppliers WHERE project_id=%s", (project_id,)).fetchone()["total"]
+    if count < 2:
+        raise HTTPException(422, "Add at least two suppliers before configuring criteria.")
+    return connection.execute("SELECT currency FROM purchasing_projects WHERE id=%s", (project_id,)).fetchone()
+
+
+@app.get("/api/projects/{project_id}/criteria")
+def get_criteria(project_id: UUID):
+    with database.connect() as connection:
+        project = criteria_project(connection, project_id)
+        row = connection.execute("SELECT * FROM project_criteria WHERE project_id=%s", (project_id,)).fetchone()
+    return {"configuration":row["configuration"] if row else default_criteria(project["currency"]),
+            "revision":row["revision"] if row else 0, "currency":project["currency"]}
+
+
+@app.put("/api/projects/{project_id}/criteria")
+def save_criteria(project_id: UUID, payload: CriteriaSave):
+    from psycopg.types.json import Jsonb
+    configuration = payload.model_dump(mode="json", exclude={"expected_revision"})
+    with database.connect() as connection:
+        project = criteria_project(connection, project_id)
+        row = connection.execute("SELECT * FROM project_criteria WHERE project_id=%s FOR UPDATE", (project_id,)).fetchone()
+        current = row["revision"] if row else 0
+        # Identical retries are safe, including a retry after an uncertain response.
+        if row and row["configuration"] == configuration:
+            return {"configuration":configuration,"revision":current,"currency":project["currency"]}
+        if payload.expected_revision != current:
+            raise HTTPException(409, "Criteria changed in another window. Your entries are kept. Reload saved criteria before editing again.")
+        connection.execute("""INSERT INTO project_criteria(project_id,configuration,revision)
+            VALUES (%s,%s,1) ON CONFLICT(project_id) DO UPDATE SET configuration=EXCLUDED.configuration,
+            revision=project_criteria.revision+1,updated_at=clock_timestamp()""", (project_id,Jsonb(configuration)))
+        touch_project(connection,project_id)
+    return {"configuration":configuration,"revision":current+1,"currency":project["currency"]}

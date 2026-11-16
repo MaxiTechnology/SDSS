@@ -77,6 +77,28 @@ def test_persistence_migration_and_retry(monkeypatch):
         second=client.post(base+'/suppliers',json={'id':str(uuid4()),'name':'Apex'}).json()
         assert client.get(base+'/supplier-readiness').json()=={'ready':True,'supplier_count':2}
         third=client.post(base+'/suppliers',json={'id':str(uuid4()),'name':'Lenovo'}).json()
+        criteria_url=base+'/criteria'
+        initial=client.get(criteria_url).json()
+        assert initial['revision']==0 and initial['currency']=='RUB'
+        assert initial['configuration']['criteria'][0]['direction']=='cost'
+        assert initial['configuration']['maximum_price'] is None
+        configuration=initial['configuration']
+        configuration['criteria'].append(dict(id='custom',name='Battery life',unit='hours',direction='benefit',selected=True,minimum='0',maximum='24'))
+        configuration['mandatory_checks']=[dict(id='security',name='Security certification',requirement='Valid certificate through delivery')]
+        configuration['maximum_price']='500000.00'
+        criteria_payload={**configuration,'expected_revision':0}
+        criteria_result=client.put(criteria_url,json=criteria_payload)
+        assert criteria_result.status_code==200,criteria_result.text
+        version=criteria_result.json()
+        assert version['revision']==1
+        assert client.get(criteria_url).json()==version
+        assert client.put(criteria_url,json=criteria_payload).json()==version
+        changed={**criteria_payload,'maximum_price':'400000.00'}
+        assert client.put(criteria_url,json=changed).status_code==409
+        changed['expected_revision']=1
+        updated=client.put(criteria_url,json=changed).json()
+        assert updated['revision']==2 and updated['configuration']['maximum_price']=='400000.00'
+
         assert client.get('/api/projects').json()[0]['supplier_count']==3
         other=client.post('/api/projects',json=payload()).json()
         otherbase='/api/projects/'+other['id']
@@ -92,8 +114,39 @@ def test_persistence_migration_and_retry(monkeypatch):
             assert client.delete(base+'/suppliers/'+item['id'],params={'expected_updated_at':item['updated_at']}).status_code==204
             assert client.delete(base+'/suppliers/'+item['id'],params={'expected_updated_at':item['updated_at']}).status_code==204
         assert client.get(base+'/supplier-readiness').status_code==422
+        assert client.get(criteria_url).status_code==422
+        assert client.put(criteria_url,json=changed).status_code==422
         assert len(client.get(base+'/suppliers').json())==1
         assert client.get('/api/projects/'+str(uuid4())+'/suppliers').status_code==404
     finally:
         with original() as connection:
             connection.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))
+
+
+@pytest.mark.parametrize('change', [
+    {'minimum':'100','maximum':'0'}, {'minimum':'0','maximum':'0'},
+    {'minimum':'NaN'}, {'maximum':'Infinity'}, {'direction':'wrong'}, {'unit':' '}, {'name':' '}
+])
+def test_criterion_validation(change):
+    from app import ScoringCriterion
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ScoringCriterion.model_validate({'id':'custom','name':'Custom','unit':'points','direction':'benefit',**change})
+
+
+def test_criteria_configuration_validation():
+    from app import CriteriaConfiguration, default_criteria
+    from pydantic import ValidationError
+    config=default_criteria('USD')
+    for criterion in config['criteria']:
+        criterion['selected']=False
+    with pytest.raises(ValidationError):
+        CriteriaConfiguration.model_validate(config)
+    config=default_criteria('USD')
+    config['criteria'][1]['name']=config['criteria'][0]['name']
+    with pytest.raises(ValidationError):
+        CriteriaConfiguration.model_validate(config)
+    config=default_criteria('USD')
+    config['maximum_price']='-1'
+    with pytest.raises(ValidationError):
+        CriteriaConfiguration.model_validate(config)

@@ -61,6 +61,17 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (2)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 3").fetchone():
+            connection.execute("""
+                CREATE TABLE project_criteria (
+                    project_id uuid PRIMARY KEY REFERENCES purchasing_projects(id) ON DELETE CASCADE,
+                    configuration jsonb NOT NULL,
+                    revision integer NOT NULL DEFAULT 1 CHECK (revision > 0),
+                    updated_at timestamptz NOT NULL DEFAULT now()
+                );
+                INSERT INTO sdss_migrations(version) VALUES (3)
+            """)
+
 
 if __name__ == "__main__":
     try:
