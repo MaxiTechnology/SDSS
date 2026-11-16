@@ -1,10 +1,25 @@
 # Supplier Decision Support System (SDSS)
 
-University project under active development, based on the SDSS Figma prototype. The frontend uses React and TypeScript; the backend uses Python and FastAPI. PostgreSQL is hosted on Neon. Only synthetic demonstration data should be used at this stage.
+University project under active development, based on the SDSS Figma prototype. React and TypeScript frontend, Python/FastAPI backend, PostgreSQL hosted on Neon. Use synthetic demonstration data only. This local demonstration has no login yet; do not expose the API publicly.
 
 ## Current implementation
 
-The starter page checks connectivity to the application service. Private setup utilities verify database connections. Project saving, supplier evaluation, AHP, TOPSIS, sensitivity analysis, decisions, and reports are planned and are not implemented yet. The application service does not yet use the saved database configuration.
+- Create a purchasing project with a required name and currency; category, estimated budget, target date and description are optional.
+- Save project details as a Draft in PostgreSQL, with a generated project reference.
+- Search the saved project list and reopen details, including after a page refresh.
+- Validate entries and retain form values when saving fails. Retrying the same save does not create a duplicate.
+
+Project editing, suppliers, criteria, weighting, eligibility, TOPSIS, sensitivity, approvals and reports remain future tickets. Navigation to these features is disabled. The budget is a planning amount here; mandatory price limits belong to the later criteria/eligibility work.
+
+## Set up on another computer
+
+1. Clone this repository. Install Node.js, Python and PostgreSQL client libraries as needed.
+2. Run `npm ci` inside `frontend`.
+3. Inside `backend`, run `python -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt`.
+4. Double-click `Connect cloud database.cmd` and enter your Neon connection strings privately. Alternatively set the backend `DATABASE_URL` environment variable. Never put credentials in frontend settings.
+5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project-storage migration. It is safe to run again.
+
+Database setup utilities only verify and save the connection. The separate migration command creates application tables. Existing data is preserved.
 
 ## Start
 
@@ -22,26 +37,32 @@ cd frontend
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. The page should say “Application service connected”. Stop each service with Ctrl+C.
-
-## Reinstall dependencies
-
-Frontend: run `npm ci` inside frontend. Backend: run `python -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt` inside backend.
+Open http://127.0.0.1:5173. Stop each service with Ctrl+C. The database is hosted in the cloud; the application still runs on your computer.
 
 ## Verification
 
-Frontend: `npm run build`. Backend: `.\.venv\Scripts\python.exe -m pytest -q`.
+Inside `frontend`:
+```powershell
+npm run build
+npx playwright test
+```
+The browser test uses installed Google Chrome and a mocked API to check validation, failure recovery, retry identity, search and reopening after refresh.
 
-Tested runtime: Node 26.13.0, npm 11.20.0, Python 3.15.2 on Windows. Resolved frontend versions are recorded in package-lock.json and backend versions in requirements-lock.txt.
+Inside `backend`:
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+To include the real database persistence test:
+```powershell
+$env:SDSS_RUN_DATABASE_TESTS='1'
+.\.venv\Scripts\python.exe -m pytest -q
+```
+The integration test creates a uniquely named test schema and removes only that schema afterwards. It verifies migration repetition, storage, retrieval, validation and duplicate-save handling. The database role must have schema creation permission.
 
-Never store passwords in source files. Local database settings, environment files, installed dependencies, and build output are excluded from source control. Each developer must configure their own database connection.
+Tested runtime: Node 26.13.0, npm 11.20.0, Python 3.15.2 on Windows. Dependency lock files record resolved package versions. On Windows database access uses the installed PostgreSQL 18 client library under `C:/Program Files/PostgreSQL/18/bin` when available.
 
-## Private database setup
+## Secrets and review workflow
 
-For Neon, double-click `Connect cloud database.cmd` and paste the connection strings into the hidden field. For local PostgreSQL, use `Configure database.cmd` and enter the sdss_app password. Both tools verify the connection before saving `backend/database.local.json`. This file contains credentials: never upload or share it. Setup does not create tables or change project records.
+`backend/database.local.json` contains private credentials and is excluded from Git, together with environment files, dependencies and build/test output. Each developer configures their own connection. Never upload this settings file.
 
-On Windows the setup utilities use the PostgreSQL 18 client library installed under `C:/Program Files/PostgreSQL/18/bin` when available.
-
-## Review and development workflow
-
-Implementation tasks are tracked on the SDSS implementation Trello board. Work is verified one task at a time. This repository contains application source and dependency lock files; Figma remains the design reference. Cloud database hosting is separate from application hosting: the application currently runs locally.
+Trello tracks implementation tickets. Figma is the design reference. The implemented project screen references are `33:13004` and `33:11588` in the SDSS Figma file. SVG icons are exported design assets.

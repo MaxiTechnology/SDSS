@@ -25,7 +25,10 @@ def parse_settings(value):
     url = urls.get("DATABASE_URL") or urls.get("DATABASE_URL_POOLED")
     if not url:
         raise ValueError("Copy the connection strings from Neon and paste them here.")
-    config = conninfo_to_dict(url)
+    try:
+        config = conninfo_to_dict(url)
+    except psycopg.Error:
+        raise ValueError("The connection details are incomplete. Copy them from Neon again.") from None
     if not config.get("host", "").endswith(".neon.tech"):
         raise ValueError("Please use the connection details supplied by Neon.")
     if not config.get("password") or "*" in config["password"]:

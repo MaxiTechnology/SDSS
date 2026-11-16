@@ -11,3 +11,6 @@ __pycache__/
 *.log
 database.local.json
 database.local.tmp
+
+test-results/
+playwright-report/
