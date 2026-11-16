@@ -13,6 +13,7 @@ def payload(**changes):
 @pytest.mark.parametrize('changes', [{'name':'   '},{'estimated_budget':'-1'},{'estimated_budget':'1.001'},{'currency':'BAD'},{'target_date':'invalid'}])
 def test_invalid_input(changes):
     assert client.post('/api/projects', json=payload(**changes)).status_code == 422
+    assert client.put('/api/projects/'+str(uuid4()), json={**payload(**changes), 'expected_updated_at':'2026-11-16T10:00:00Z'}).status_code == 422
 
 def test_storage_error_is_private(monkeypatch):
     def fail(): raise database.psycopg.OperationalError('secret password')
@@ -49,6 +50,18 @@ def test_persistence_migration_and_retry(monkeypatch):
         assert len(client.get('/api/projects').json())==1
         assert client.post('/api/projects', json={**data,'name':'Changed'}).status_code==409
         assert client.get('/api/projects/'+str(uuid4())).status_code==404
+        edit={**data, 'name':'Revised project', 'currency':'RUB', 'estimated_budget':'500000.00', 'expected_updated_at':saved['updated_at']}
+        result=client.put('/api/projects/'+data['id'], json=edit)
+        assert result.status_code==200, result.text
+        revised=result.json()
+        assert revised['currency']=='RUB' and revised['estimated_budget']=='500000.00'
+        assert revised['reference']==saved['reference'] and revised['created_at']==saved['created_at']
+        assert revised['updated_at']!=saved['updated_at']
+        assert client.get('/api/projects/'+data['id']).json()==revised
+        assert client.put('/api/projects/'+data['id'], json=edit).json()==revised
+        assert client.put('/api/projects/'+data['id'], json={**edit,'name':'Stale change'}).status_code==409
+        assert client.get('/api/projects/'+data['id']).json()==revised
+        assert client.put('/api/projects/'+str(uuid4()), json=edit).status_code==404
     finally:
         with original() as connection:
             connection.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))

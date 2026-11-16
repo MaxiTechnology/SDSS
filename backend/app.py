@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -23,8 +23,7 @@ def database_unavailable(request, error):
     return JSONResponse(status_code=503, content={"detail": "Project storage is unavailable. Please try again. Your form has been kept."})
 
 
-class ProjectInput(BaseModel):
-    id: UUID
+class ProjectFields(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     category: str = Field(default="", max_length=100)
     currency: Literal["USD", "EUR", "GBP", "RUB", "GHS"]
@@ -36,6 +35,14 @@ class ProjectInput(BaseModel):
     @classmethod
     def trim_text(cls, value):
         return value.strip() if isinstance(value, str) else value
+
+
+class ProjectInput(ProjectFields):
+    id: UUID
+
+
+class ProjectUpdate(ProjectFields):
+    expected_updated_at: datetime
 
 
 def serialize(row):
@@ -79,4 +86,24 @@ def create_project(payload: ProjectInput, response: Response):
             if any(row[key] != value for key, value in values.items()):
                 raise HTTPException(409, "This save was already completed with different details. Reopen the saved project from the list.")
             response.status_code = 200
+    return serialize(row)
+
+
+@app.put("/api/projects/{project_id}")
+def update_project(project_id: UUID, payload: ProjectUpdate):
+    values = payload.model_dump(exclude={"expected_updated_at"})
+    with database.connect() as connection:
+        row = connection.execute("SELECT * FROM purchasing_projects WHERE id = %s FOR UPDATE", (project_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Project not found.")
+        if row["updated_at"] != payload.expected_updated_at:
+            if all(row[key] == value for key, value in values.items()):
+                return serialize(row)
+            raise HTTPException(409, "This project changed since you opened it. Your entries are kept. Cancel editing and reopen the project before trying again.")
+        row = connection.execute("""
+            UPDATE purchasing_projects SET name=%(name)s, category=%(category)s,
+            currency=%(currency)s, estimated_budget=%(estimated_budget)s,
+            target_date=%(target_date)s, description=%(description)s,
+            updated_at=clock_timestamp() WHERE id=%(id)s RETURNING *
+        """, {**values, "id": project_id}).fetchone()
     return serialize(row)

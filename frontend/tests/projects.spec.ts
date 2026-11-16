@@ -4,8 +4,16 @@ test("save failure preserves entries, retry and reopen survive refresh", async (
 }) => {
   let saved: any = null;
   let attempts: any[] = [];
+  let updates = 0;
   await page.route("**/api/projects**", async (route) => {
     const request = route.request();
+    if (request.method() === "PUT") {
+      updates++;
+      if (updates === 1) return route.fulfill({status:503,json:{detail:"Update unavailable"}});
+      expect(request.postDataJSON().expected_updated_at).toBe(saved.updated_at);
+      saved={...saved,...request.postDataJSON(),updated_at:"2026-11-16T11:00:00Z"};
+      return route.fulfill({json:saved});
+    }
     if (request.method() === "POST") {
       attempts.push(request.postDataJSON());
       if (attempts.length === 1)
@@ -74,6 +82,24 @@ test("save failure preserves entries, retry and reopen survive refresh", async (
   await expect(page.getByLabel("Project Description")).toHaveValue(
     "Compare quality and delivery.",
   );
+  await page.getByRole("button", {name:"Edit Project",exact:true}).click();
+  await page.getByLabel("Project Name").fill("Discard this change");
+  await page.getByRole("button", {name:"Cancel Editing"}).click();
+  await expect(page.getByLabel("Project Name")).toHaveValue("Laptop fleet renewal");
+  expect(updates).toBe(0);
+  await page.getByRole("button", {name:"Edit Project",exact:true}).click();
+  await page.getByLabel("Currency").selectOption("RUB");
+  await expect(page.getByText("Currency changed.", {exact:false})).toBeVisible();
+  await expect(page.getByLabel("Estimated Budget")).toHaveValue("140000.25");
+  await page.getByLabel("Estimated Budget").fill("500000.00");
+  await page.getByRole("button", {name:"Save Changes"}).click();
+  await expect(page.getByRole("alert")).toContainText("Update unavailable");
+  await expect(page.getByLabel("Currency")).toHaveValue("RUB");
+  await page.getByRole("button", {name:"Save Changes"}).click();
+  await expect(page.getByLabel("Currency")).toBeDisabled();
+  await page.reload();
+  await expect(page.getByLabel("Currency")).toHaveValue("RUB");
+  await expect(page.getByLabel("Estimated Budget")).toHaveValue("500000.00");
   expect(
     await page
       .locator("img")

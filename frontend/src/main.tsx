@@ -52,6 +52,7 @@ function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [form, setForm] = useState({ ...empty });
   const [id, setId] = useState(crypto.randomUUID());
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -94,6 +95,7 @@ function App() {
     }
   }
   useEffect(() => {
+    setEditing(false);
     if (fresh) {
       setForm({ ...empty });
       setId(crypto.randomUUID());
@@ -111,18 +113,24 @@ function App() {
     setBusy(true);
     setError("");
     try {
-      const p = await api<Project>("/api/projects", {
-        method: "POST",
+      const p = await api<Project>(editing && project ? `/api/projects/${project.id}` : "/api/projects", {
+        method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
           id,
+          ...(editing && project ? { expected_updated_at: project.updated_at } : {}),
           name: form.name.trim(),
           estimated_budget: form.estimated_budget || null,
           target_date: form.target_date || null,
         }),
       });
-      setNotice("Project saved successfully.");
+      setNotice(editing ? "Project changes saved successfully." : "Project saved successfully.");
+      if (editing) {
+        setProject(p);
+        setForm({ ...p, estimated_budget: p.estimated_budget ?? "", target_date: p.target_date ?? "" });
+        setEditing(false);
+      }
       go(`/projects/${p.id}`);
     } catch (e) {
       setError(
@@ -251,7 +259,7 @@ function App() {
           {error && (
             <div className="error" role="alert">
               {error}
-              {!fresh && <button onClick={() => void load()}>Try again</button>}
+              {!fresh && !editing && <button onClick={() => void load()}>Try again</button>}
             </div>
           )}
           {loading ? (
@@ -266,7 +274,7 @@ function App() {
                   </h2>
                   <small>* Required fields</small>
                 </div>
-                <fieldset disabled={detail || busy}>
+                <fieldset disabled={(detail && !editing) || busy}>
                   <div className="fields">
                     <label className="wide">
                       Project Name <em>*</em>
@@ -342,6 +350,9 @@ function App() {
                     </label>
                   </div>
                 </fieldset>
+                {editing && project && form.currency !== project.currency && (
+                  <p className="info" role="status">Currency changed. The budget number has not been converted. Please review the budget before saving.</p>
+                )}
                 <div className="info">
                   <Icon n={6} />
                   <div>
@@ -362,13 +373,19 @@ function App() {
                     type="button"
                     className="secondary"
                     disabled={busy}
-                    onClick={() => go("/")}
+                    onClick={() => {
+                      if (editing && project) {
+                        setForm({ ...project, estimated_budget: project.estimated_budget ?? "", target_date: project.target_date ?? "" });
+                        setEditing(false); setError(""); setNotice("");
+                      } else go("/");
+                    }}
                   >
-                    {detail ? "← Back to Projects" : "Cancel"}
+                    {editing ? "Cancel Editing" : detail ? "← Back to Projects" : "Cancel"}
                   </button>
-                  {!detail && (
+                  {detail && !editing && <button type="button" className="primary" onClick={() => { setEditing(true); setNotice(""); }}>Edit Project</button>}
+                  {(!detail || editing) && (
                     <button className="primary" disabled={busy}>
-                      {busy ? "Saving…" : "Create Project"}
+                      {busy ? "Saving…" : editing ? "Save Changes" : "Create Project"}
                       <Icon n={9} />
                     </button>
                   )}

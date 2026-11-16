@@ -7,9 +7,11 @@ University project under active development, based on the SDSS Figma prototype. 
 - Create a purchasing project with a required name and currency; category, estimated budget, target date and description are optional.
 - Save project details as a Draft in PostgreSQL, with a generated project reference.
 - Search the saved project list and reopen details, including after a page refresh.
+- Edit saved project details or cancel without saving. Currency changes keep the budget number unchanged and show a review reminder.
+- Detect stale edits from another window and preserve unsaved entries instead of overwriting newer changes.
 - Validate entries and retain form values when saving fails. Retrying the same save does not create a duplicate.
 
-Project editing, suppliers, criteria, weighting, eligibility, TOPSIS, sensitivity, approvals and reports remain future tickets. Navigation to these features is disabled. The budget is a planning amount here; mandatory price limits belong to the later criteria/eligibility work.
+Suppliers, criteria, weighting, eligibility, TOPSIS, sensitivity, approvals and reports remain future tickets. Navigation to these features is disabled. The budget is a planning amount here; mandatory price limits belong to the later criteria/eligibility work.
 
 ## Set up on another computer
 
@@ -46,7 +48,7 @@ Inside `frontend`:
 npm run build
 npx playwright test
 ```
-The browser test uses installed Google Chrome and a mocked API to check validation, failure recovery, retry identity, search and reopening after refresh.
+The browser test uses installed Google Chrome and a mocked API to check validation, failure recovery, retry identity, search, reopening after refresh, editing, cancellation and failed-update recovery.
 
 Inside `backend`:
 ```powershell
@@ -57,7 +59,7 @@ To include the real database persistence test:
 $env:SDSS_RUN_DATABASE_TESTS='1'
 .\.venv\Scripts\python.exe -m pytest -q
 ```
-The integration test creates a uniquely named test schema and removes only that schema afterwards. It verifies migration repetition, storage, retrieval, validation and duplicate-save handling. The database role must have schema creation permission.
+The integration test creates a uniquely named test schema and removes only that schema afterwards. It verifies migration repetition, storage, retrieval, validation, duplicate-save handling, updates, safe update retries and stale-edit protection. The database role must have schema creation permission.
 
 Tested runtime: Node 26.13.0, npm 11.20.0, Python 3.15.2 on Windows. Dependency lock files record resolved package versions. On Windows database access uses the installed PostgreSQL 18 client library under `C:/Program Files/PostgreSQL/18/bin` when available.
 
