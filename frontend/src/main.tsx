@@ -1,3 +1,4 @@
+import { ManualWeighting } from './weighting';
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/inter/400.css";
@@ -53,7 +54,8 @@ function App() {
     formView = fresh || detail;
   const supplierView = detail && route.endsWith("/suppliers");
   const criteriaView = detail && route.endsWith("/criteria");
-  const stage = criteriaView ? 2 : supplierView ? 1 : 0;
+  const weightingView = detail && route.endsWith("/weights/manual");
+  const stage = criteriaView || weightingView ? 2 : supplierView ? 1 : 0;
   function go(path: string) {
     location.hash = path;
   }
@@ -203,12 +205,12 @@ function App() {
               </button>
               <h1>
                 {detail
-                  ? criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
+                  ? weightingView ? "Manual Weighting" : criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
                   : "Create Purchasing Project"}
               </h1>
               <p className="subtitle">
                 {detail
-                  ? criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
+                  ? weightingView ? "Assign and approve criterion importance." : criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
                   : "Set up the basic details for your purchasing project to get started."}
               </p>
               <div className="stepper">
@@ -256,6 +258,8 @@ function App() {
           )}
           {loading ? (
             <p role="status">Loading projects…</p>
+          ) : weightingView && project ? (
+            <ManualWeighting key={project.id} projectId={project.id} />
           ) : criteriaView && project ? (
             <Criteria key={project.id} projectId={project.id} />
           ) : supplierView && project ? (

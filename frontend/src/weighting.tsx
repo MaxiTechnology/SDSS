@@ -1,0 +1,27 @@
+import {useEffect,useState} from 'react';
+import {api} from './api';
+type Saved={criteria:{id:string;name:string;unit:string}[];criteria_revision:number;weights:Record<string,string>;revision:number;approved:boolean;needs_review:boolean};
+export function ManualWeighting({projectId}:{projectId:string}){
+ const base=`/api/projects/${projectId}/weights/manual`;
+ const [saved,setSaved]=useState<Saved|null>(null),[weights,setWeights]=useState<Record<string,string>>({}),[reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const dirty=!!saved&&JSON.stringify(weights)!==JSON.stringify(saved.weights);
+ const valid=Object.values(weights).every(v=>/^\d+(\.\d{1,2})?$/.test(v)&&Number(v)<=100);
+ const total=Object.values(weights).reduce((sum,v)=>sum+Math.round(Number(v||0)*100),0);
+ async function load(){setBusy(true);setError('');try{const data=await api<Saved>(base);setSaved(data);setWeights(data.weights);setReviewed(data.approved);}catch(e){setError(e instanceof Error?e.message:'Could not load weights.');}finally{setBusy(false);}}
+ useEffect(()=>{void load();},[projectId]);
+ useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
+ function change(id:string,value:string){setWeights({...weights,[id]:value});setReviewed(false);setNotice('');}
+ async function save(approved:boolean){if(!saved||busy||!valid)return;setBusy(true);setError('');setNotice('');try{const data=await api<Saved>(base,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({weights,criteria_revision:saved.criteria_revision,expected_revision:saved.revision,approved})});setSaved(data);setWeights(data.weights);setReviewed(data.approved);setNotice(approved?'Manual weights approved and saved.':'Draft weights saved.');}catch(e){setError(e instanceof Error?e.message:'Saving failed. Your entries are kept.');}finally{setBusy(false);}}
+ if(!saved)return <section>{error?<div role="alert" className="error">{error}<button onClick={()=>void load()}>Try again</button></div>:<p>Loading weights…</p>}</section>;
+ return <section className="project-form weighting-page"><h2>Manual Weighting</h2><p>Assign importance to each selected scoring criterion. The total must equal 100% before approval. Mandatory checks receive no weight.</p>
+ {error&&<div role="alert" className="error">{error}<button onClick={()=>{if(!dirty||confirm('Discard unsaved weights and reload?'))void load();}}>Reload saved weights</button></div>}
+ {notice&&<div role="status" className="success">{notice}</div>}
+ {saved.needs_review&&<p className="info">Criteria changed. Assign and approve weights again for the current criteria.</p>}
+ {saved.approved&&!dirty&&<p className="success">Approved weights are saved. Editing any weight requires approval again.</p>}
+ <fieldset disabled={busy}><div className="actions"><button className="secondary" onClick={()=>{const units=Math.floor(10000/saved.criteria.length),extra=10000%saved.criteria.length;setWeights(Object.fromEntries(saved.criteria.map((c,i)=>[c.id,((units+(i<extra?1:0))/100).toFixed(2)])));setReviewed(false);setNotice('');}}>Distribute Equally</button><button className="secondary" onClick={()=>{setWeights(saved.weights);setReviewed(saved.approved);setNotice('');}}>Reset to Saved</button></div>
+ <table><thead><tr><th>Criterion</th><th>Weight (%)</th></tr></thead><tbody>{saved.criteria.map(c=><tr key={c.id}><td>{c.name}<small className="supplier-note"> ({c.unit})</small></td><td><input aria-label={`Weight for ${c.name}`} type="number" min="0" max="100" step="0.01" value={weights[c.id]??''} onChange={e=>change(c.id,e.target.value)}/></td></tr>)}</tbody></table>
+ <p className={valid&&total===10000?'success':'error'} role="status">Total Weight: {(total/100).toFixed(2)}% — {valid&&total===10000?'Valid (100%)':'Adjust weights to total 100% before approval.'}</p>
+ <label className="inline-check"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I have reviewed these weights and approve their use for evaluation.</label></fieldset>
+ <footer><button className="secondary" disabled={busy} onClick={()=>{if(!dirty||confirm('Discard unsaved weights?'))location.hash=`/projects/${projectId}/criteria`;}}>← Back to Criteria</button><div className="actions"><button className="secondary" disabled={busy||!valid} onClick={()=>void save(false)}>Save Draft</button><button className="primary" disabled={busy||!valid||total!==10000||!reviewed} onClick={()=>void save(true)}>Approve Weights</button></div></footer>
+ <p className="supplier-note">Eligibility review will be added in the next implementation stage.</p></section>;
+}

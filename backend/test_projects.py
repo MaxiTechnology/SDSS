@@ -98,6 +98,32 @@ def test_persistence_migration_and_retry(monkeypatch):
         changed['expected_revision']=1
         updated=client.put(criteria_url,json=changed).json()
         assert updated['revision']==2 and updated['configuration']['maximum_price']=='400000.00'
+        weight_url=base+'/weights/manual'
+        initial=client.get(weight_url).json()
+        assert initial['criteria_revision']==2 and not initial['approved']
+        ids=list(initial['weights'])
+        weights={key:'0' for key in ids}
+        weights[ids[0]]='60'
+        weights[ids[1]]='40'
+        wp=dict(weights=weights,criteria_revision=2,expected_revision=0,approved=True)
+        result=client.put(weight_url,json=wp)
+        assert result.status_code==200,result.text
+        assert result.json()['approved'] and result.json()['revision']==1
+        assert client.put(weight_url,json=wp).json()==result.json()
+        assert client.get(weight_url).json()==result.json()
+        invalid={**wp,'weights':{**weights,ids[0]:'61'}}
+        assert client.put(weight_url,json=invalid).status_code==422
+        draft={**invalid,'approved':False}
+        assert client.put(weight_url,json=draft).status_code==409
+        draft['expected_revision']=1
+        assert not client.put(weight_url,json=draft).json()['approved']
+        assert client.put(weight_url,json={**draft,'weights':{'unknown':'100','other':'0'}}).status_code==422
+        revised_criteria={**changed,'expected_revision':2,'maximum_price':'300000.00'}
+        assert client.put(base+'/criteria',json=revised_criteria).status_code==200
+        stale=client.get(weight_url).json()
+        assert stale['needs_review'] and not stale['approved'] and all(v=='0' for v in stale['weights'].values())
+        assert client.put(weight_url,json=draft).status_code==409
+
 
         assert client.get('/api/projects').json()[0]['supplier_count']==3
         other=client.post('/api/projects',json=payload()).json()
@@ -150,3 +176,11 @@ def test_criteria_configuration_validation():
     config['maximum_price']='-1'
     with pytest.raises(ValidationError):
         CriteriaConfiguration.model_validate(config)
+
+
+@pytest.mark.parametrize('value',['-1','100.01','NaN','Infinity','1.001'])
+def test_manual_weight_rejects_invalid_values(value):
+    from app import ManualWeightsSave
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ManualWeightsSave(weights={'price':value,'quality':'0'},criteria_revision=1,expected_revision=0)

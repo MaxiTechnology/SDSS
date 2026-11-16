@@ -15,7 +15,9 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-Weighting, eligibility enforcement, TOPSIS, sensitivity, approvals and reports remain future tickets. Mandatory requirements and maximum price are configuration only until eligibility is implemented. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
+AI/AHP weighting, eligibility enforcement, TOPSIS, sensitivity, approvals and reports remain future tickets. Mandatory requirements and maximum price are configuration only until eligibility is implemented. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
+
+Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Later evaluation stages remain unavailable.
 
 ## Set up on another computer
 
@@ -23,7 +25,7 @@ Weighting, eligibility enforcement, TOPSIS, sensitivity, approvals and reports r
 2. Run `npm ci` inside `frontend`.
 3. Inside `backend`, run `python -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt`.
 4. Double-click `Connect cloud database.cmd` and enter your Neon connection strings privately. Alternatively set the backend `DATABASE_URL` environment variable. Never put credentials in frontend settings.
-5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier and criteria storage migrations. It is safe to run again.
+5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier, criteria and manual-weight storage migrations. It is safe to run again.
 
 Database setup utilities only verify and save the connection. The separate migration command creates application tables. Existing data is preserved.
 

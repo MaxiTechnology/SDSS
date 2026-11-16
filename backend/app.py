@@ -312,3 +312,74 @@ def save_criteria(project_id: UUID, payload: CriteriaSave):
             revision=project_criteria.revision+1,updated_at=clock_timestamp()""", (project_id,Jsonb(configuration)))
         touch_project(connection,project_id)
     return {"configuration":configuration,"revision":current+1,"currency":project["currency"]}
+
+
+class ManualWeightsSave(BaseModel):
+    weights: dict[str, Decimal] = Field(min_length=2, max_length=20)
+    criteria_revision: int = Field(gt=0)
+    expected_revision: int = Field(ge=0)
+    approved: bool = False
+
+    @field_validator("weights")
+    @classmethod
+    def valid_weights(cls, values):
+        if any(not v.is_finite() or v < 0 or v > 100 or v.as_tuple().exponent < -2 for v in values.values()):
+            raise ValueError("Weights must be between 0 and 100, with at most two decimal places.")
+        return values
+
+    @model_validator(mode="after")
+    def approval_total(self):
+        if self.approved and sum(self.weights.values()) != Decimal("100"):
+            raise ValueError("Approved weights must total exactly 100%.")
+        return self
+
+
+def weighting_criteria(connection, project_id):
+    criteria_project(connection, project_id)
+    row = connection.execute("SELECT * FROM project_criteria WHERE project_id=%s", (project_id,)).fetchone()
+    if not row:
+        raise HTTPException(422, "Save your criteria before assigning weights.")
+    return row
+
+
+def weights_json(row, criteria):
+    selected = [c for c in criteria["configuration"]["criteria"] if c["selected"]]
+    current = bool(row and row["criteria_revision"] == criteria["revision"])
+    return {"criteria": selected, "criteria_revision": criteria["revision"],
+            "weights": row["weights"] if current else {c["id"]: "0" for c in selected},
+            "revision": row["revision"] if row else 0, "approved": bool(current and row["approved"]),
+            "needs_review": bool(row and not current)}
+
+
+@app.get("/api/projects/{project_id}/weights/manual")
+def get_manual_weights(project_id: UUID):
+    with database.connect() as connection:
+        criteria = weighting_criteria(connection, project_id)
+        row = connection.execute("SELECT * FROM project_weights WHERE project_id=%s", (project_id,)).fetchone()
+    return weights_json(row, criteria)
+
+
+@app.put("/api/projects/{project_id}/weights/manual")
+def save_manual_weights(project_id: UUID, payload: ManualWeightsSave):
+    from psycopg.types.json import Jsonb
+    with database.connect() as connection:
+        criteria = weighting_criteria(connection, project_id)
+        ids = {c["id"] for c in criteria["configuration"]["criteria"] if c["selected"]}
+        if payload.criteria_revision != criteria["revision"]:
+            raise HTTPException(409, "Criteria changed. Reload weights and review the selected criteria before saving.")
+        if set(payload.weights) != ids:
+            raise HTTPException(422, "Assign one weight to every selected scoring criterion, and no weights to mandatory checks.")
+        values = {k: format(v, ".2f") for k, v in payload.weights.items()}
+        row = connection.execute("SELECT * FROM project_weights WHERE project_id=%s FOR UPDATE", (project_id,)).fetchone()
+        revision = row["revision"] if row else 0
+        if row and row["weights"] == values and row["approved"] == payload.approved and row["criteria_revision"] == payload.criteria_revision:
+            return weights_json(row, criteria)
+        if payload.expected_revision != revision:
+            raise HTTPException(409, "Weights changed in another window. Your entries are kept. Reload saved weights before editing again.")
+        row = connection.execute("""INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved)
+            VALUES (%s,%s,%s,1,%s) ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,
+            criteria_revision=EXCLUDED.criteria_revision,revision=project_weights.revision+1,
+            approved=EXCLUDED.approved,updated_at=clock_timestamp() RETURNING *""",
+            (project_id,Jsonb(values),payload.criteria_revision,payload.approved)).fetchone()
+        touch_project(connection, project_id)
+    return weights_json(row, criteria)

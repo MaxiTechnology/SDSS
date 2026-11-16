@@ -630,3 +630,7 @@ dialog::backdrop { background:#0006; }
 .mandatory-row {display:grid;grid-template-columns:1fr 2fr auto;gap:16px;align-items:end;margin-bottom:16px}
 .criteria-page .table-card > button {margin:16px}
 @media(max-width:900px){.criteria-grid,.mandatory-row{grid-template-columns:1fr}}
+
+.project-form.weighting-page .inline-check { display:flex; flex-direction:row; align-items:center; gap:10px; margin:20px 0; }
+.project-form.weighting-page .inline-check input { width:18px; height:18px; flex:none; }
+.weighting-page td small.supplier-note { background:none; padding:0; }
