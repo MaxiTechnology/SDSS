@@ -4,6 +4,8 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "./style.css";
+import { api } from "./api";
+import { Suppliers } from "./suppliers";
 type Project = {
   id: string;
   reference: string;
@@ -15,6 +17,7 @@ type Project = {
   description: string;
   status: string;
   updated_at: string;
+  supplier_count?: number;
 };
 const empty = {
   name: "",
@@ -30,21 +33,6 @@ function Icon({ n, list = false }: { n: number; list?: boolean }) {
       <img alt="" src={`/assets/${list ? "list-" : ""}imgIcon${n || ""}.svg`} />
     </span>
   );
-}
-async function api<T>(path: string, options?: RequestInit): Promise<T> {
-  const r = await fetch(path, {
-    ...options,
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!r.ok) {
-    const b = await r.json().catch(() => ({}));
-    throw Error(
-      typeof b.detail === "string"
-        ? b.detail
-        : "Please check your entries and try again.",
-    );
-  }
-  return r.json();
 }
 function App() {
   const [route, setRoute] = useState(location.hash.slice(1));
@@ -62,6 +50,7 @@ function App() {
   const fresh = route === "/new",
     detail = route.startsWith("/projects/"),
     formView = fresh || detail;
+  const supplierView = detail && route.endsWith("/suppliers");
   function go(path: string) {
     location.hash = path;
   }
@@ -211,12 +200,12 @@ function App() {
               </button>
               <h1>
                 {detail
-                  ? "Purchasing Project Details"
+                  ? supplierView ? "Add Suppliers" : "Purchasing Project Details"
                   : "Create Purchasing Project"}
               </h1>
               <p className="subtitle">
                 {detail
-                  ? "Saved project details. Supplier setup is coming in a later update."
+                  ? supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
                   : "Set up the basic details for your purchasing project to get started."}
               </p>
               <div className="stepper">
@@ -226,11 +215,11 @@ function App() {
                   "Criteria & Weights",
                   "Evaluate & Decide",
                 ].map((v, i) => (
-                  <div className={i === 0 ? "current" : ""} key={v}>
+                  <div className={i === (supplierView ? 1 : 0) ? "current" : ""} key={v}>
                     <b>{i + 1}</b>
                     <span>
                       {i + 1}. {v}
-                      <small>{i === 0 ? "Active" : "Upcoming"}</small>
+                      <small>{i === (supplierView ? 1 : 0) ? "Active" : supplierView && i === 0 ? "Completed" : "Upcoming"}</small>
                     </span>
                   </div>
                 ))}
@@ -264,6 +253,8 @@ function App() {
           )}
           {loading ? (
             <p role="status">Loading projects…</p>
+          ) : supplierView && project ? (
+            <Suppliers key={project.id} projectId={project.id} reference={project.reference} />
           ) : formView ? (
             (!detail || project) && (
               <form className="project-form" onSubmit={save}>
@@ -364,7 +355,7 @@ function App() {
                     <small>
                       {detail
                         ? "These details are stored in your cloud database."
-                        : "Supplier setup will be available in a later update."}
+                        : "After saving, you can add suppliers to this project."}
                     </small>
                   </div>
                 </div>
@@ -382,7 +373,7 @@ function App() {
                   >
                     {editing ? "Cancel Editing" : detail ? "← Back to Projects" : "Cancel"}
                   </button>
-                  {detail && !editing && <button type="button" className="primary" onClick={() => { setEditing(true); setNotice(""); }}>Edit Project</button>}
+                  {detail && !editing && <div className="actions"><button type="button" className="secondary" onClick={() => { setEditing(true); setNotice(""); }}>Edit Project</button><button type="button" className="primary" onClick={() => {setNotice(""); go(`/projects/${project?.id}/suppliers`);}}>Continue to Add Suppliers →</button></div>}
                   {(!detail || editing) && (
                     <button className="primary" disabled={busy}>
                       {busy ? "Saving…" : editing ? "Save Changes" : "Create Project"}
@@ -446,7 +437,7 @@ function App() {
                               </div>
                             </td>
                             <td>{p.category || "Not specified"}</td>
-                            <td>0 Added</td>
+                            <td>{p.supplier_count ?? 0} Added</td>
                             <td>
                               <span className="chip">Draft</span>
                             </td>

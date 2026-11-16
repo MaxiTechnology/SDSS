@@ -62,6 +62,38 @@ def test_persistence_migration_and_retry(monkeypatch):
         assert client.put('/api/projects/'+data['id'], json={**edit,'name':'Stale change'}).status_code==409
         assert client.get('/api/projects/'+data['id']).json()==revised
         assert client.put('/api/projects/'+str(uuid4()), json=edit).status_code==404
+        base='/api/projects/'+data['id']
+        assert client.get(base+'/suppliers').json()==[]
+        assert client.get(base+'/supplier-readiness').status_code==422
+        assert client.post(base+'/suppliers',json={'id':str(uuid4()),'name':'  '}).status_code==422
+        supplier={'id':str(uuid4()),'name':' Dell Technologies ','location':'Austin','description':'Hardware'}
+        first=client.post(base+'/suppliers',json=supplier)
+        assert first.status_code==201,first.text
+        first=first.json()
+        assert first['name']=='Dell Technologies'
+        assert client.post(base+'/suppliers',json=supplier).status_code==200
+        assert len(client.get(base+'/suppliers').json())==1
+        assert client.get(base+'/supplier-readiness').status_code==422
+        second=client.post(base+'/suppliers',json={'id':str(uuid4()),'name':'Apex'}).json()
+        assert client.get(base+'/supplier-readiness').json()=={'ready':True,'supplier_count':2}
+        third=client.post(base+'/suppliers',json={'id':str(uuid4()),'name':'Lenovo'}).json()
+        assert client.get('/api/projects').json()[0]['supplier_count']==3
+        other=client.post('/api/projects',json=payload()).json()
+        otherbase='/api/projects/'+other['id']
+        assert client.get(otherbase+'/suppliers').json()==[]
+        change={'name':'Dell revised','location':'London','description':'Updated','expected_updated_at':first['updated_at']}
+        assert client.put(otherbase+'/suppliers/'+first['id'],json=change).status_code==404
+        revised_supplier=client.put(base+'/suppliers/'+first['id'],json=change).json()
+        assert revised_supplier['name']=='Dell revised'
+        assert client.put(base+'/suppliers/'+first['id'],json=change).json()==revised_supplier
+        assert client.put(base+'/suppliers/'+first['id'],json={**change,'name':'stale'}).status_code==409
+        assert client.delete(base+'/suppliers/'+first['id'],params={'expected_updated_at':first['updated_at']}).status_code==409
+        for item in (second,third):
+            assert client.delete(base+'/suppliers/'+item['id'],params={'expected_updated_at':item['updated_at']}).status_code==204
+            assert client.delete(base+'/suppliers/'+item['id'],params={'expected_updated_at':item['updated_at']}).status_code==204
+        assert client.get(base+'/supplier-readiness').status_code==422
+        assert len(client.get(base+'/suppliers').json())==1
+        assert client.get('/api/projects/'+str(uuid4())+'/suppliers').status_code==404
     finally:
         with original() as connection:
             connection.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))

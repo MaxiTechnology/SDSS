@@ -52,6 +52,7 @@ def serialize(row):
         "estimated_budget": str(row["estimated_budget"]) if row["estimated_budget"] is not None else None,
         "target_date": row["target_date"].isoformat() if row["target_date"] else None,
         "description": row["description"], "status": row["status"],
+        "supplier_count": row.get("supplier_count", 0),
         "created_at": row["created_at"].isoformat(), "updated_at": row["updated_at"].isoformat(),
     }
 
@@ -59,7 +60,7 @@ def serialize(row):
 @app.get("/api/projects")
 def projects():
     with database.connect() as connection:
-        rows = connection.execute("SELECT * FROM purchasing_projects ORDER BY created_at DESC, id DESC").fetchall()
+        rows = connection.execute("SELECT p.*, (SELECT count(*) FROM project_suppliers s WHERE s.project_id=p.id) AS supplier_count FROM purchasing_projects p ORDER BY created_at DESC, id DESC").fetchall()
     return [serialize(row) for row in rows]
 
 
@@ -107,3 +108,105 @@ def update_project(project_id: UUID, payload: ProjectUpdate):
             updated_at=clock_timestamp() WHERE id=%(id)s RETURNING *
         """, {**values, "id": project_id}).fetchone()
     return serialize(row)
+
+
+class SupplierFields(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    location: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=5000)
+
+    @field_validator("name", "location", "description", mode="before")
+    @classmethod
+    def trim_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+
+class SupplierInput(SupplierFields):
+    id: UUID
+
+
+class SupplierUpdate(SupplierFields):
+    expected_updated_at: datetime
+
+
+def supplier_json(row):
+    return {**{key: str(row[key]) for key in ("id", "project_id", "name", "location", "description")},
+            "updated_at": row["updated_at"].isoformat()}
+
+
+def require_project(connection, project_id):
+    if not connection.execute("SELECT id FROM purchasing_projects WHERE id=%s FOR UPDATE", (project_id,)).fetchone():
+        raise HTTPException(404, "Project not found.")
+
+
+def touch_project(connection, project_id):
+    connection.execute("UPDATE purchasing_projects SET updated_at=clock_timestamp() WHERE id=%s", (project_id,))
+
+
+@app.get("/api/projects/{project_id}/suppliers")
+def suppliers(project_id: UUID):
+    with database.connect() as connection:
+        require_project(connection, project_id)
+        rows = connection.execute("SELECT * FROM project_suppliers WHERE project_id=%s ORDER BY created_at,id", (project_id,)).fetchall()
+    return [supplier_json(row) for row in rows]
+
+
+@app.post("/api/projects/{project_id}/suppliers", status_code=201)
+def add_supplier(project_id: UUID, payload: SupplierInput, response: Response):
+    with database.connect() as connection:
+        require_project(connection, project_id)
+        values = {**payload.model_dump(), "project_id": project_id}
+        row = connection.execute("""INSERT INTO project_suppliers(id,project_id,name,location,description)
+            VALUES (%(id)s,%(project_id)s,%(name)s,%(location)s,%(description)s)
+            ON CONFLICT(id) DO NOTHING RETURNING *""", values).fetchone()
+        if row is None:
+            row = connection.execute("SELECT * FROM project_suppliers WHERE id=%s AND project_id=%s", (payload.id,project_id)).fetchone()
+            if row is None or any(row[key] != value for key,value in values.items()):
+                raise HTTPException(409, "This supplier save conflicts with an earlier save. Close and reopen the form.")
+            response.status_code=200
+        else:
+            touch_project(connection,project_id)
+    return supplier_json(row)
+
+
+@app.put("/api/projects/{project_id}/suppliers/{supplier_id}")
+def edit_supplier(project_id: UUID, supplier_id: UUID, payload: SupplierUpdate):
+    with database.connect() as connection:
+        require_project(connection,project_id)
+        row=connection.execute("SELECT * FROM project_suppliers WHERE id=%s AND project_id=%s FOR UPDATE", (supplier_id,project_id)).fetchone()
+        if row is None:
+            raise HTTPException(404,"Supplier not found in this project.")
+        values=payload.model_dump(exclude={"expected_updated_at"})
+        if row["updated_at"] != payload.expected_updated_at:
+            if all(row[key]==value for key,value in values.items()):
+                return supplier_json(row)
+            raise HTTPException(409,"This supplier changed in another window. Your entries are kept. Close the form and refresh before editing again.")
+        row=connection.execute("""UPDATE project_suppliers SET name=%(name)s,location=%(location)s,
+            description=%(description)s,updated_at=clock_timestamp() WHERE id=%(id)s AND project_id=%(project_id)s RETURNING *""",
+            {**values,"id":supplier_id,"project_id":project_id}).fetchone()
+        touch_project(connection,project_id)
+    return supplier_json(row)
+
+
+@app.delete("/api/projects/{project_id}/suppliers/{supplier_id}", status_code=204)
+def remove_supplier(project_id: UUID, supplier_id: UUID, expected_updated_at: datetime):
+    with database.connect() as connection:
+        require_project(connection,project_id)
+        row=connection.execute("SELECT * FROM project_suppliers WHERE id=%s AND project_id=%s FOR UPDATE",(supplier_id,project_id)).fetchone()
+        if row is None:
+            return Response(status_code=204)
+        if row["updated_at"] != expected_updated_at:
+            raise HTTPException(409,"This supplier changed in another window. Refresh before removing it.")
+        connection.execute("DELETE FROM project_suppliers WHERE id=%s AND project_id=%s",(supplier_id,project_id))
+        touch_project(connection,project_id)
+    return Response(status_code=204)
+
+
+@app.get("/api/projects/{project_id}/supplier-readiness")
+def supplier_readiness(project_id: UUID):
+    with database.connect() as connection:
+        require_project(connection,project_id)
+        count=connection.execute("SELECT count(*) AS total FROM project_suppliers WHERE project_id=%s",(project_id,)).fetchone()["total"]
+    if count < 2:
+        raise HTTPException(422,"Add at least two suppliers before continuing to Criteria & Weights.")
+    return {"ready":True,"supplier_count":count}

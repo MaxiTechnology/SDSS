@@ -46,6 +46,22 @@ def migrate(connection):
             connection.execute("INSERT INTO sdss_migrations(version) VALUES (1)")
 
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 2").fetchone():
+            connection.execute("""
+                CREATE TABLE project_suppliers (
+                    id uuid PRIMARY KEY,
+                    project_id uuid NOT NULL REFERENCES purchasing_projects(id) ON DELETE CASCADE,
+                    name varchar(200) NOT NULL CHECK (length(btrim(name)) > 0),
+                    location varchar(200) NOT NULL DEFAULT '',
+                    description varchar(5000) NOT NULL DEFAULT '',
+                    created_at timestamptz NOT NULL DEFAULT now(),
+                    updated_at timestamptz NOT NULL DEFAULT now()
+                );
+                CREATE INDEX project_suppliers_project_idx ON project_suppliers(project_id);
+                INSERT INTO sdss_migrations(version) VALUES (2)
+            """)
+
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

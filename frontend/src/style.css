@@ -603,3 +603,21 @@ td {
     flex-wrap: wrap;
   }
 }
+.actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.supplier-page .info { margin:0 0 20px; }
+.supplier-page .card-heading p { font-size:12px; }
+.supplier-note { font-size:11px; margin:0; padding:12px 20px; background:#eff4ff; }
+.supplier-description { white-space:normal; max-width:300px; overflow-wrap:anywhere; }
+.supplier-footer { display:flex; justify-content:space-between; gap:20px; padding:24px 0; }
+.supplier-footer small { display:block; max-width:300px; margin-top:8px; color:#565d79; }
+dialog { width:min(512px, calc(100vw - 32px)); max-height:calc(100vh - 48px); overflow:auto; padding:0; border:0; border-radius:8px; color:#0b1c30; box-shadow:0 16px 40px #0003; }
+dialog::backdrop { background:#0006; }
+.dialog-heading,.dialog-footer { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; }
+.dialog-heading { border-bottom:1px solid #e5e9f4; }
+.dialog-heading h2 { font-size:18px; }
+.dialog-body { padding:24px; }
+.dialog-body label:not(:first-child) { margin-top:20px; }
+.dialog-body input,.dialog-body textarea { border:1px solid #d7ddea; background:#f8f9ff; }
+.dialog-body small,.dialog-body p { color:#565d79; font-size:11px; }
+.dialog-footer { border-top:1px solid #e5e9f4; }
+@media(max-width:700px) { .supplier-footer {flex-direction:column;} .supplier-page .card-heading {align-items:flex-start; gap:12px;} }
