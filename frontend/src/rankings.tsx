@@ -9,6 +9,6 @@ export function Rankings({projectId}:{projectId:string}){
  <p>Calculated {new Date(run.created_at).toLocaleString()}. Scores range from 0 to 1; higher is better.</p>
  <table><thead><tr><th>Rank</th><th>Supplier</th><th>TOPSIS score</th></tr></thead><tbody>{run.snapshot.result.rows.map(r=><tr key={r.id}><td>{r.rank}</td><td>{r.name}</td><td>{Number(r.score).toFixed(6)}</td></tr>)}</tbody></table>
  <details><summary>View Calculation Details</summary><p>Vector normalization, approved weights, cost/benefit ideal values and Euclidean distances. Ranks use unrounded scores; exact calculated ties share a rank.</p><pre style={{overflow:'auto',maxHeight:450}}>{JSON.stringify(run.snapshot,null,2)}</pre></details>
- <button className="primary" disabled={run.stale} onClick={()=>location.hash=`/projects/${projectId}/sensitivity`}>Run Sensitivity Analysis</button><p className="info">Final purchasing decisions will be added in a later step.</p></>}
+ <button className="primary" disabled={run.stale} onClick={()=>location.hash=`/projects/${projectId}/sensitivity`}>Run Sensitivity Analysis</button><button className="primary" disabled={run.stale} onClick={()=>location.hash=`/projects/${projectId}/decision`}>Continue to Final Decision →</button></>}
  <button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/matrix`}>← Back to Matrix</button></section>;
 }

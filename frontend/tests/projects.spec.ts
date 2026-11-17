@@ -100,11 +100,7 @@ test("save failure preserves entries, retry and reopen survive refresh", async (
   await page.reload();
   await expect(page.getByLabel("Currency")).toHaveValue("RUB");
   await expect(page.getByLabel("Estimated Budget")).toHaveValue("500000.00");
-  expect(
-    await page
-      .locator("img")
-      .evaluateAll((images) =>
-        images.every((img) => img.complete && img.naturalWidth > 0),
-      ),
-  ).toBe(true);
+  await expect.poll(() => page.locator("img").evaluateAll((images) =>
+    images.every((img) => img.complete && img.naturalWidth > 0),
+  )).toBe(true);
 });

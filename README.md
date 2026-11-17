@@ -46,7 +46,7 @@ cd backend
 Second window:
 ```powershell
 cd frontend
-npm run dev
+npm.cmd run dev
 ```
 
 Open http://127.0.0.1:5173. Stop each service with Ctrl+C. The database is hosted in the cloud; the application still runs on your computer.
@@ -55,8 +55,8 @@ Open http://127.0.0.1:5173. Stop each service with Ctrl+C. The database is hoste
 
 Inside `frontend`:
 ```powershell
-npm run build
-npx playwright test
+npm.cmd run build
+npx.cmd playwright test
 ```
 The browser test uses installed Google Chrome and a mocked API to check validation, failure recovery, retry identity, search, reopening after refresh, editing, cancellation and failed-update recovery, supplier counts from empty to three, supplier editing/removal, cancellation and reopening. Criteria checks cover configuration, custom criteria, mandatory checks, ranges, failed-save recovery, persistence after refresh and the minimum selection gate.
 
@@ -91,11 +91,20 @@ Calculate Rankings uses only a complete, current saved matrix and approved weigh
 
 Policy: calculations use 50-digit Decimal arithmetic. Sort by unrounded scores; show six decimal places. Exact calculated ties share a competition rank (1, 1, 3), with supplier ID used only for stable display order. A tied highest score has no single recommendation. All-zero columns and completely indistinguishable weighted datasets block calculation with a review message; constant nonzero columns contribute zero distance. No prototype scores are hardcoded.
 
-Each run stores its input matrix, eligible supplier names/IDs, criteria, approved weights, currency and calculation details in an append-only application snapshot. Identical retries reuse a run. Changed inputs mark the previous snapshot stale; it remains readable and must be recalculated before use. This is a demonstration history, not a secured audit ledger: authentication, role permissions and final decision approval remain future work. Sensitivity and final decisions are not yet available. Migration 7 adds ranking storage. Tests cover a worked symmetric example, preference reversal, ties, zero/degenerate cases, unit scaling, cloud persistence, retry identity, stale snapshots and browser failure recovery.
+Each run stores its input matrix, eligible supplier names/IDs, criteria, approved weights, currency and calculation details in an append-only application snapshot. Identical retries reuse a run. Changed inputs mark the previous snapshot stale; it remains readable and must be recalculated before use. This is a demonstration history, not a secured audit ledger: authentication and role permissions remain future work. Sensitivity analysis and human decision recording are available. Migration 7 adds ranking storage. Tests cover a worked symmetric example, preference reversal, ties, zero/degenerate cases, unit scaling, cloud persistence, retry identity, stale snapshots and browser failure recovery.
 
 
 ## Sensitivity analysis
 
 Open Run Sensitivity Analysis from current rankings. Trial weights use the saved baseline matrix, criterion preferences and eligible supplier pool. Weights must total exactly 100%, each between 0 and 100 with at most two decimal places. Run Simulation compares original and scenario ranks and scores, including tied highest-ranked sets. Reset restores baseline weights. Editing weights clears the previous trial result.
 
-Simulations do not write approved weights, ranking runs, supplier data or decisions. Scenarios are temporary and reset on navigation or refresh; saving scenario drafts is not implemented yet. The API rejects outdated or replaced baselines under the project lock, uses the same TOPSIS engine, and rejects degenerate scenarios. Tests verify validation, rank reversal, unchanged approved data, stale baseline rejection, browser retry and reset. Authentication and final approval remain separate unfinished features.
+Simulations do not write approved weights, ranking runs, supplier data or decisions. Scenarios are temporary and reset on navigation or refresh; saving scenario drafts is not implemented yet. The API rejects outdated or replaced baselines under the project lock, uses the same TOPSIS engine, and rejects degenerate scenarios. Tests verify validation, rank reversal, unchanged approved data, stale baseline rejection, browser retry and reset. Authentication remains unfinished; human final decisions are recorded separately.
+
+
+## Final purchasing decisions (SDSS-015)
+
+Continue to Final Decision from current rankings. Approve the unique highest-ranked eligible supplier, select an alternative with a required explanation (also used to resolve a highest-score tie), or defer with a required reason and no award. The reviewer must explicitly confirm. Reasons are nonblank text, at most 5,000 characters; no arbitrary minimum word count is imposed.
+
+Migration 8 adds decision storage. Each confirmation atomically stores the calculation snapshot, project details, supplier selection or no award, reasons, version, server-assigned demonstration actor, and time. Rankings and simulation weights are unchanged. Confirmed records are append-only through the API. A deliberate revision requires a revision reason and the current version; previous versions remain visible. Concurrent or stale confirmations are rejected. Repeating the same request identifier returns the original record; changing its content is rejected. Changed evaluation inputs mark the previous decision as needing review, rather than erasing it. Recalculation is required before a new confirmation. Project list workflow statuses and reports are separate backlog tickets.
+
+This is an unauthenticated demonstration, not live purchasing authorization or a tamper-proof audit system. Use synthetic data. Database credentials remain local and excluded from GitHub. Browser tests cover required explanations, retry identity, confirmation locking, revision, deferral and reopening; database tests cover snapshots, eligibility selection, versions, stale inputs and duplicate confirmations.

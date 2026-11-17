@@ -638,3 +638,93 @@ def simulate_sensitivity(project_id: UUID, payload: SensitivityRequest):
         except ValueError as error:
             raise HTTPException(422,str(error)) from None
         return {'baseline_id':str(row['id']), 'weights':{k:str(v) for k,v in payload.weights.items()}, 'result':result}
+
+
+class DecisionRequest(BaseModel):
+    id: UUID
+    ranking_id: UUID
+    expected_version: int = Field(ge=0)
+    action: Literal['approve', 'alternative', 'defer']
+    supplier_id: UUID | None = None
+    reason: str = Field(default='', max_length=5000)
+    revision_reason: str = Field(default='', max_length=5000)
+    confirmed: Literal[True]
+
+    @field_validator('reason', 'revision_reason', mode='before')
+    @classmethod
+    def trim_reason(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode='after')
+    def validate_decision(self):
+        if self.action == 'defer' and self.supplier_id is not None:
+            raise ValueError('Deferral must not award a supplier.')
+        if self.action != 'defer' and self.supplier_id is None:
+            raise ValueError('Choose an eligible supplier.')
+        if self.action != 'approve' and not self.reason:
+            raise ValueError('Explain the alternative selection or deferral.')
+        if self.expected_version and not self.revision_reason:
+            raise ValueError('Explain why the confirmed decision is being revised.')
+        return self
+
+
+def decision_current(connection, project_id, ranking_id):
+    try:
+        _, _, _, context = matrix_context(connection, project_id)
+    except HTTPException:
+        return False
+    matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s', (project_id,)).fetchone()
+    run = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC LIMIT 1', (project_id,)).fetchone()
+    return bool(run and run['id'] == ranking_id and matrix and not ranking_json(run, context, matrix['revision'])['stale'])
+
+
+def decision_json(row, current):
+    return {'id': str(row['id']), 'ranking_id': str(row['ranking_id']), 'version': row['version'],
+            'snapshot': row['snapshot'], 'actor': row['actor'], 'created_at': row['created_at'].isoformat(),
+            'stale': not current}
+
+
+@app.get('/api/projects/{project_id}/decisions')
+def get_decisions(project_id: UUID):
+    with database.connect() as connection:
+        require_project(connection, project_id)
+        rows = connection.execute('SELECT * FROM project_decisions WHERE project_id=%s ORDER BY version DESC', (project_id,)).fetchall()
+        current = decision_current(connection, project_id, rows[0]['ranking_id']) if rows else False
+        return {'decisions': [decision_json(row, current if index == 0 else False) for index, row in enumerate(rows)]}
+
+
+@app.post('/api/projects/{project_id}/decisions')
+def confirm_decision(project_id: UUID, payload: DecisionRequest):
+    from psycopg.types.json import Jsonb
+    request = payload.model_dump(mode='json')
+    with database.connect() as connection:
+        # All input mutations take the same project lock; confirmation sees one coherent version.
+        require_project(connection, project_id)
+        duplicate = connection.execute('SELECT * FROM project_decisions WHERE id=%s', (payload.id,)).fetchone()
+        if duplicate:
+            if duplicate['project_id'] != project_id or duplicate['request'] != request:
+                raise HTTPException(409, 'This confirmation identifier was already used. Reload the decision.')
+            return decision_json(duplicate, decision_current(connection, project_id, duplicate['ranking_id']))
+        latest = connection.execute('SELECT * FROM project_decisions WHERE project_id=%s ORDER BY version DESC LIMIT 1', (project_id,)).fetchone()
+        if payload.expected_version != (latest['version'] if latest else 0):
+            raise HTTPException(409, 'A decision was confirmed in another window. Reload before revising it.')
+        if not decision_current(connection, project_id, payload.ranking_id):
+            raise HTTPException(409, 'Rankings or project inputs changed. Calculate current rankings before confirming a decision.')
+        run = connection.execute('SELECT * FROM ranking_runs WHERE id=%s AND project_id=%s', (payload.ranking_id, project_id)).fetchone()
+        rows = run['snapshot']['result']['rows']
+        chosen = next((r for r in rows if r['id'] == str(payload.supplier_id)), None)
+        leaders = [r for r in rows if r['rank'] == 1]
+        if payload.action != 'defer' and chosen is None:
+            raise HTTPException(422, 'Choose a supplier from the current eligible ranking.')
+        if payload.action == 'approve' and (len(leaders) != 1 or chosen['rank'] != 1):
+            raise HTTPException(422, 'Recommended approval requires a single highest-ranked supplier. Explain an alternative selection for ties or other suppliers.')
+        if payload.action == 'alternative' and len(leaders) == 1 and chosen['rank'] == 1:
+            raise HTTPException(422, 'Use recommended approval for the single highest-ranked supplier.')
+        project = connection.execute('SELECT * FROM purchasing_projects WHERE id=%s', (project_id,)).fetchone()
+        snapshot = {'action': payload.action, 'supplier': chosen, 'reason': payload.reason,
+                    'revision_reason': payload.revision_reason, 'project': ProjectFields(**project).model_dump(mode='json'),
+                    'ranking': run['snapshot']}
+        row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
+            (payload.id, project_id, payload.ranking_id, payload.expected_version + 1, Jsonb(request), Jsonb(snapshot), 'Demo User (unauthenticated)')).fetchone()
+        return decision_json(row, True)
