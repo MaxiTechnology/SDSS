@@ -645,3 +645,5 @@ dialog::backdrop { background:#0006; }
 .eligibility-page .review-check h3 {margin-top:0}
 
 .matrix-cell-error { display:block; color:#b42318; font-size:12px; margin-top:6px; }
+
+.decision-report p { overflow-wrap:anywhere; }

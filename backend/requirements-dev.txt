@@ -1,3 +1,4 @@
 -r requirements.txt
 httpx
 pytest
+pypdf==6.7.5

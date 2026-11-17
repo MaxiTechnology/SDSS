@@ -40,6 +40,10 @@ def test_decision_history_retries_and_stale_inputs(monkeypatch):
         assert client.get(base+'/decisions').json()=={'decisions':[]}
         for sid in [other,str(uuid4())]: assert client.post(base+'/decisions',json={**payload,'supplier_id':sid}).status_code==422
         saved=client.post(base+'/decisions',json=payload);assert saved.status_code==200,saved.text
+        report_path=base+'/decisions/'+saved.json()['id']+'/report'
+        report=client.get(report_path).json()
+        assert report['selected_supplier']=='A'
+        assert report['eligibility_notes']
         assert saved.json()['version']==1 and saved.json()['snapshot']['supplier']['id']==winner
         assert client.post(base+'/decisions',json=payload).json()['id']==saved.json()['id']
         assert client.post(base+'/decisions',json={**payload,'reason':'different'}).status_code==409
@@ -54,6 +58,7 @@ def test_decision_history_retries_and_stale_inputs(monkeypatch):
         history=client.get(base+'/decisions').json()['decisions'];assert [d['version'] for d in history]==[3,2,1]
         assert history[2]['snapshot']==saved.json()['snapshot']
         s=suppliers[0];result=client.put(base+'/suppliers/'+s['id'],json={'name':'Changed supplier','expected_updated_at':s['updated_at']});assert result.status_code==200,result.text
+        assert client.get(report_path).json()==report
         assert client.get(base+'/decisions').json()['decisions'][0]['stale']
         assert client.post(base+'/decisions',json={**defer,'id':str(uuid4()),'expected_version':3}).status_code==409
         assert client.post(base+'/decisions',json=defer).json()['stale']

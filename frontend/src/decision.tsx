@@ -20,6 +20,7 @@ export function FinalDecision({projectId}:{projectId:string}){
  {run?.stale&&<p role="alert" className="error">Rankings are out of date. Review inputs and calculate again before confirming a decision.</p>}
  {latest&&<article><h3>{labels[latest.snapshot.action]} — version {latest.version}</h3>{latest.stale&&<p className="error">This historical decision needs review because the evaluation has changed.</p>}
  <p>{latest.snapshot.supplier?`Selected supplier: ${latest.snapshot.supplier.name}`:'No supplier was awarded.'}</p><p>{latest.snapshot.reason}</p><p>Confirmed by {latest.actor} on {new Date(latest.created_at).toLocaleString()}.</p>
+ <p><button className="primary" onClick={()=>location.hash=`/projects/${projectId}/reports/${latest.id}`}>View Decision Report</button></p>
  {!editing&&<button className="secondary" disabled={!run||run.stale} onClick={()=>{setEditing(true);change();}}>Create a decision revision</button>}</article>}
  {canEdit&&<fieldset disabled={busy} style={{border:0,padding:0}}><legend>{latest?'Revise confirmed decision':'Choose your decision'}</legend>
  <p>{unique?`Highest-ranked supplier: ${leaders[0].name}.`:'The highest score is tied. Select a supplier and explain your choice.'}</p>
@@ -30,6 +31,6 @@ export function FinalDecision({projectId}:{projectId:string}){
  <p><label><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} /> I have reviewed the ranking and confirm this purchasing decision.</label></p>
  <button className="primary" disabled={!confirmed||(action==='approve'&&!unique)||(action==='alternative'&&!supplier)||(action!=='approve'&&!reason.trim())||Boolean(latest&&!revisionReason.trim())} onClick={save}>{busy?'Saving…':'Confirm Decision'}</button>
  {editing&&<button className="secondary" onClick={()=>setEditing(false)}>Cancel revision</button>}</fieldset>}
- {history.length>0&&<details><summary>Decision history ({history.length})</summary>{history.map(d=><article key={d.id}><h4>Version {d.version}: {labels[d.snapshot.action]}</h4><p>{d.snapshot.supplier?.name||'No award'} · {new Date(d.created_at).toLocaleString()} · {d.actor}</p><p>{d.snapshot.reason}</p>{d.snapshot.revision_reason&&<p>Revision reason: {d.snapshot.revision_reason}</p>}</article>)}</details>}
+ {history.length>0&&<details><summary>Decision history ({history.length})</summary>{history.map(d=><article key={d.id}><h4>Version {d.version}: {labels[d.snapshot.action]}</h4><p>{d.snapshot.supplier?.name||'No award'} · {new Date(d.created_at).toLocaleString()} · {d.actor}</p><p>{d.snapshot.reason}</p><button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/reports/${d.id}`}>View report for version {d.version}</button>{d.snapshot.revision_reason&&<p>Revision reason: {d.snapshot.revision_reason}</p>}</article>)}</details>}
  <p><button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/rankings`}>← Back to Rankings</button></p></section>;
 }

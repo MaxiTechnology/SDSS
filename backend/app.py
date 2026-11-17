@@ -724,7 +724,39 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
         snapshot = {'action': payload.action, 'supplier': chosen, 'reason': payload.reason,
                     'revision_reason': payload.revision_reason, 'project': ProjectFields(**project).model_dump(mode='json'),
                     'ranking': run['snapshot']}
+        criteria, eligible, _, _ = matrix_context(connection, project_id)
+        snapshot['reference'] = f"PRJ-{project['project_number']:06d}"
+        snapshot['weight_method'] = 'Manual percentage weighting (approved)'
+        snapshot['eligibility'] = {'configuration': criteria['configuration'], 'suppliers': eligible}
         row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor)
             VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
             (payload.id, project_id, payload.ranking_id, payload.expected_version + 1, Jsonb(request), Jsonb(snapshot), 'Demo User (unauthenticated)')).fetchone()
         return decision_json(row, True)
+
+
+def saved_report(project_id, decision_id):
+    from reports import report_data
+    with database.connect() as connection:
+        row = connection.execute('SELECT * FROM project_decisions WHERE project_id=%s AND id=%s', (project_id, decision_id)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Saved decision not found for this project.')
+        return report_data(row)
+
+
+@app.get('/api/projects/{project_id}/decisions/{decision_id}/report')
+def get_decision_report(project_id: UUID, decision_id: UUID):
+    return saved_report(project_id, decision_id)
+
+
+@app.get('/api/projects/{project_id}/decisions/{decision_id}/report.pdf')
+def download_decision_report(project_id: UUID, decision_id: UUID):
+    from reports import render_pdf
+    report = saved_report(project_id, decision_id)
+    try:
+        content = render_pdf(report)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    return Response(content, media_type='application/pdf', headers={
+        'Content-Disposition': f'attachment; filename="SDSS-decision-{decision_id}-v{report["version"]}.pdf"',
+        'Cache-Control': 'no-store',
+    })

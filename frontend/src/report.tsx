@@ -1,0 +1,27 @@
+import {useEffect,useState} from 'react';
+import {api} from './api';
+type Report={id:string;project_id:string;version:number;title:string;outcome:string;selected_supplier:string|null;recommendation:string;created_at:string;confirmed_at:string;actor:string;ranking_id:string;reference:string;reason:string;revision_reason:string;project:{name:string;category:string;currency:string;estimated_budget:string|null;target_date:string|null;description:string};method:string;weight_method:string;criteria:{id:string;name:string;unit:string;direction:string;weight:string}[];rankings:{id:string;name:string;rank:number;score:string}[];values:{supplier:string;criterion:string;value:string;unit:string}[];eligibility_notes:string[];sensitivity:string;notice:string};
+export function DecisionReport({projectId,decisionId}:{projectId:string;decisionId:string}){
+ const [report,setReport]=useState<Report|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const path=`/api/projects/${projectId}/decisions/${decisionId}/report`;
+ useEffect(()=>{setReport(null);setError('');api<Report>(path).then(setReport).catch(e=>setError(e.message));},[path]);
+ async function download(){setBusy(true);setError('');try{
+ const response=await fetch(path+'.pdf',{signal:AbortSignal.timeout(30000)});
+ if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.detail||'PDF download failed. Please try again.');}
+ const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`SDSS-decision-${decisionId}-v${report?.version}.pdf`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+ }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ return <section className="supplier-page decision-report">
+ <div className="report-actions"><button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/decision`}>← Back to Decision</button> <button className="primary" disabled={!report||busy} onClick={download}>{busy?'Preparing PDF…':'Download PDF'}</button></div>
+ {error&&<p className="error" role="alert">{error}</p>}{!report&&!error&&<p role="status">Loading saved report…</p>}
+ {report&&<><h2>{report.title} — version {report.version}</h2><p className="success">{report.outcome}</p><h3>{report.project.name}</h3>
+ <p>Reference: {report.reference}</p><p>Highest-ranked: {report.recommendation}</p><p><strong>{report.selected_supplier?`Selected supplier: ${report.selected_supplier}`:'No supplier awarded.'}</strong></p>
+ <p>Notes / justification: {report.reason}</p><p>Revision reason: {report.revision_reason}</p><p>Confirmed by {report.actor} on {report.confirmed_at}.</p><p>Decision ID: {report.id}</p><p>Calculation ID: {report.ranking_id}</p>
+ <h3>Project and commercial basis</h3><p>Category: {report.project.category||'Not specified'} · Currency: {report.project.currency}</p><p>Planning budget: {report.project.estimated_budget??'Not specified'} · Target date: {report.project.target_date||'Not specified'}</p><p>{report.project.description||'No project description recorded.'}</p>
+ <h3>Saved supplier rankings</h3><p>Scores range from 0 to 1; higher is better. Scores display six decimal places; saved ranks use unrounded scores.</p>
+ <table><thead><tr><th>Rank</th><th>Supplier</th><th>TOPSIS score</th></tr></thead><tbody>{report.rankings.map(r=><tr key={r.id}><td>{r.rank}</td><td>{r.name}</td><td>{Number(r.score).toFixed(6)}</td></tr>)}</tbody></table>
+ <h3>Criteria and approved weights</h3><p>{report.method}</p><p>{report.weight_method}</p>
+ <table><thead><tr><th>Criterion</th><th>Unit</th><th>Preference</th><th>Weight (%)</th></tr></thead><tbody>{report.criteria.map(c=><tr key={c.id}><td>{c.name}</td><td>{c.unit}</td><td>{c.direction==='cost'?'Lower is better':'Higher is better'}</td><td>{c.weight}</td></tr>)}</tbody></table>
+ <h3>Saved supplier input values</h3><table><thead><tr><th>Supplier</th><th>Criterion</th><th>Value</th><th>Unit</th></tr></thead><tbody>{report.values.map((v,i)=><tr key={i}><td>{v.supplier}</td><td>{v.criterion}</td><td>{v.value}</td><td>{v.unit}</td></tr>)}</tbody></table>
+ <h3>Eligibility at confirmation</h3>{report.eligibility_notes.map((s,i)=><p key={i}>{s}</p>)}<h3>Sensitivity analysis</h3><p>{report.sensitivity}</p><p className="info">{report.notice}</p></>}
+ </section>;
+}

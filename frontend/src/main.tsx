@@ -1,3 +1,4 @@
+import { DecisionReport } from './report';
 import { FinalDecision } from './decision';
 import { Sensitivity } from './sensitivity';
 import { Rankings } from './rankings';
@@ -61,11 +62,12 @@ function App() {
   const criteriaView = detail && route.endsWith("/criteria");
   const weightingView = detail && route.endsWith("/weights/manual");
   const eligibilityView = detail && route.endsWith("/eligibility");
+  const reportView = detail && route.split("/")[3] === "reports";
   const decisionView = detail && route.endsWith("/decision");
   const sensitivityView = detail && route.endsWith("/sensitivity");
   const rankingsView = detail && route.endsWith("/rankings");
   const matrixView = detail && route.endsWith("/matrix");
-  const stage = decisionView || sensitivityView || rankingsView || matrixView || eligibilityView ? 3 : criteriaView || weightingView ? 2 : supplierView ? 1 : 0;
+  const stage = reportView || decisionView || sensitivityView || rankingsView || matrixView || eligibilityView ? 3 : criteriaView || weightingView ? 2 : supplierView ? 1 : 0;
   function go(path: string) {
     location.hash = path;
   }
@@ -215,12 +217,12 @@ function App() {
               </button>
               <h1>
                 {detail
-                  ? decisionView ? "Final Purchasing Decision" : sensitivityView ? "Sensitivity Analysis" : rankingsView ? "Supplier Rankings" : matrixView ? "Supplier Evaluation Matrix" : eligibilityView ? "Supplier Eligibility Review" : weightingView ? "Manual Weighting" : criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
+                  ? reportView ? "Saved Decision Report" : decisionView ? "Final Purchasing Decision" : sensitivityView ? "Sensitivity Analysis" : rankingsView ? "Supplier Rankings" : matrixView ? "Supplier Evaluation Matrix" : eligibilityView ? "Supplier Eligibility Review" : weightingView ? "Manual Weighting" : criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
                   : "Create Purchasing Project"}
               </h1>
               <p className="subtitle">
                 {detail
-                  ? decisionView ? "Record the human purchasing decision and its reasons." : sensitivityView ? "Compare rankings under different criterion weights." : rankingsView ? "Review calculated supplier scores." : matrixView ? "Enter supplier values for comparison." : eligibilityView ? "Review mandatory supplier requirements." : weightingView ? "Assign and approve criterion importance." : criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
+                  ? reportView ? "Review or download the report for a saved decision version." : decisionView ? "Record the human purchasing decision and its reasons." : sensitivityView ? "Compare rankings under different criterion weights." : rankingsView ? "Review calculated supplier scores." : matrixView ? "Enter supplier values for comparison." : eligibilityView ? "Review mandatory supplier requirements." : weightingView ? "Assign and approve criterion importance." : criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
                   : "Set up the basic details for your purchasing project to get started."}
               </p>
               <div className="stepper">
@@ -268,6 +270,8 @@ function App() {
           )}
           {loading ? (
             <p role="status">Loading projects…</p>
+          ) : reportView && project ? (
+            <DecisionReport key={route} projectId={project.id} decisionId={route.split("/")[4]} />
           ) : decisionView && project ? (
             <FinalDecision key={project.id} projectId={project.id} />
           ) : sensitivityView && project ? (
