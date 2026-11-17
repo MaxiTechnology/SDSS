@@ -37,6 +37,7 @@ def report_data(row):
         'method': ranking.get('method', 'TOPSIS vector normalization v1'),
         'weight_method': snapshot.get('weight_method', 'Approved percentage weights; weighting source was not recorded in this older snapshot.'),
         'weight_diagnostics': snapshot.get('weight_provenance', {}).get('result'),
+        'ai_assistance': ({**snapshot['weight_provenance']['suggestion'],'review_notes':snapshot['weight_provenance'].get('notes','')} if snapshot.get('weight_provenance',{}).get('suggestion') else None),
         'criteria': [{**c, 'weight': ranking['weights'][c['id']]} for c in criteria],
         'rankings': ranking['result']['rows'],
         'values': [{'supplier': s['name'], 'criterion': c['name'], 'unit': c['unit'], 'value': ranking['entries'][s['id']][c['id']]} for s in ranking['suppliers'] for c in criteria],
@@ -98,6 +99,11 @@ def render_pdf(report):
     table(['Criterion','Unit','Preference','Weight (%)'],[[c['name'],c['unit'],'Lower is better' if c['direction']=='cost' else 'Higher is better',c['weight']] for c in report['criteria']],[185,90,140,90])
     section('Saved supplier input values',['Prices and other commercial values below reproduce the saved evaluation matrix. Units are those configured for this project.'])
     table(['Supplier','Criterion','Value','Unit'],[[v['supplier'],v['criterion'],v['value'],v['unit']] for v in report['values']],[155,175,80,95])
+    if report.get('ai_assistance'):
+        a=report['ai_assistance']
+        section('AI assistance - reviewed by a human', [f"Provider: {a['provider']} | Model: {a['model']}",f"Purchasing priorities sent: {a['priorities']}", a['summary'], 'Explanations describe the original AI suggestions. Approved weights may have been adjusted by the reviewer.',f"Review notes: {a['review_notes'] or 'No additional review notes.'}"])
+        for c in report['criteria']:
+            section(c['name'], [f"Original AI weight: {a['weights'][c['id']]}% | Approved weight: {c['weight']}%", a['rationales'][c['id']]])
     section('Eligibility at confirmation', report['eligibility_notes'])
     section('Sensitivity analysis', [report['sensitivity']])
     section('Report limitations', [report['notice']])

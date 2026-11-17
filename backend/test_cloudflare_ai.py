@@ -57,3 +57,19 @@ def test_malformed_response_is_private(monkeypatch):
     monkeypatch.setattr(ai.urllib.request,'urlopen',lambda *args,**kwargs:Reply())
     with pytest.raises(ai.AIConnectionError) as error:ai.generate(ai.validate_settings(ACCOUNT,TOKEN),[])
     assert TOKEN not in str(error.value)
+
+
+
+def test_structured_response_object_is_preserved_for_schema_validation(monkeypatch):
+    expected={'weights':{'x':60,'y':40},'rationales':{'x':'Cost','y':'Quality'},'summary':'Balance'}
+    class Reply:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def read(self,limit):return json.dumps({'success':True,'result':{'response':expected}}).encode()
+    monkeypatch.setattr(ai.urllib.request,'urlopen',lambda *args,**kwargs:Reply())
+    assert json.loads(ai.generate(ai.validate_settings(ACCOUNT,TOKEN),[]))==expected
+
+
+
+def test_duplicate_keys_rejected_even_for_structured_output():
+    with pytest.raises(ValueError):json.loads('{"weights":{"x":20,"x":60,"y":40}}',object_pairs_hook=ai.unique_json_pairs)

@@ -21,7 +21,7 @@ The API journey and browser page checks complement each other. There is no claim
 ## Remaining work
 
 - SDSS-009: AHP comparisons, diagnostics, persistence, approval and saved version history were added after the manual acceptance check. Separate tests verify the AHP path. The user completed the 40/20/20/10/10 comparison example, approved it, recalculated rankings, confirmed decision version 2 and downloaded its AHP report. CR display and pagination were subsequently refined.
-- SDSS-010: AI suggestions are not implemented. Cloudflare Workers AI was recommended as the free provider; account setup, model confirmation and private credentials are still needed. Manual fallback works.
+- SDSS-010: AI suggestion generation, strict validation, adjustment, provenance/history and explicit approval are implemented. The user verified Cloudflare setup; a live synthetic suggestion and isolated API/browser checks passed. User acceptance of the full AI journey remains pending. Manual and AHP fallback work.
 - SDSS-011: evidence file upload/storage and access scope. Current pass/fail reviews use notes without attachments.
 - SDSS-014: sensitivity trials are temporary; reports truthfully identify the absence of saved findings.
 - SDSS-018: real dashboard metrics, workflow statuses and secondary lists. Project-list Draft labels do not yet derive from approval/deferral state.
@@ -29,3 +29,14 @@ The API journey and browser page checks complement each other. There is no claim
 - Login, roles, operational safeguards and real purchasing authorization are outside current demonstration readiness. APIs must stay local.
 
 Do not mark the whole project or SDSS-017 Done based on the manual journey alone. Update Trello only against each ticket's actual acceptance criteria.
+
+
+## AI implementation verification - 2026-11-18
+
+- Default backend run: 50 passed, seven opt-in cloud integration tests skipped.
+- Browser page suite: 12 passed, including AI consent, service-error retry, preserved edits, exact-total gating, adjustment, explicit approval and reopening.
+- Separate isolated Neon AI journey passed: generation leaves active weights alone; approvals capture original/applied weights and provenance; category changes invalidate AI context; stale concurrent responses do not overwrite drafts; cross-project access is rejected; historical reports remain unchanged.
+- One valid live Cloudflare suggestion was generated with synthetic two-criterion context after handling structured provider response objects. This was a direct provider check, not a request using the user's project or suppliers.
+- Migration 10 was applied. No real project weighting, evaluation matrix, ranking or purchasing decision was altered by verification.
+- AI-assisted PDF layout was rendered and visually inspected. The report distinguishes original suggestions and approved weights and includes provider/model, priorities, explanations and review notes.
+- User acceptance of AI generation, approval and the downstream report is pending. SDSS-017 and the whole project remain incomplete.

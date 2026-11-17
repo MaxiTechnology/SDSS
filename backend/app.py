@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -387,6 +387,13 @@ def eligibility_context(connection, project_id):
     weights = connection.execute('SELECT * FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
     if not weights or not weights['approved'] or weights['criteria_revision'] != criteria['revision']:
         raise HTTPException(422, 'Approve weights for the current criteria before reviewing eligibility.')
+    if weights['method']=='ai':
+        import ai_weighting
+        category=connection.execute('SELECT category FROM purchasing_projects WHERE id=%s',(project_id,)).fetchone()['category']
+        selected=[c for c in criteria['configuration']['criteria'] if c['selected']]
+        if weights['provenance'].get('context')!=ai_weighting.fingerprint(ai_weighting.input_context(category,selected),criteria['revision']):
+            raise HTTPException(422,'AI context changed. Request and approve current AI weights or switch to Manual/AHP weighting.')
+
     return criteria
 
 
@@ -729,7 +736,7 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
         criteria, eligible, _, _ = matrix_context(connection, project_id)
         snapshot['reference'] = f"PRJ-{project['project_number']:06d}"
         active_weights = connection.execute('SELECT method,provenance FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
-        snapshot['weight_method'] = 'AHP pairwise weighting (approved)' if active_weights['method'] == 'ahp' else 'Manual percentage weighting (approved)'
+        snapshot['weight_method'] = {'ahp':'AHP pairwise weighting (approved)','ai':'AI-assisted weighting (approved)','manual':'Manual percentage weighting (approved)'}[active_weights['method']]
         snapshot['weight_provenance'] = active_weights['provenance']
         snapshot['eligibility'] = {'configuration': criteria['configuration'], 'suppliers': eligible}
         row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor)
@@ -865,4 +872,139 @@ def ahp_history(project_id: UUID):
     with database.connect() as connection:
         require_project(connection, project_id)
         rows = connection.execute('SELECT revision,snapshot,created_at FROM project_ahp_versions WHERE project_id=%s ORDER BY revision DESC LIMIT 20',(project_id,)).fetchall()
+        return {'versions':[{'revision':r['revision'],'snapshot':r['snapshot'],'created_at':r['created_at'].isoformat()} for r in rows]}
+
+
+class AISuggestionRequest(BaseModel):
+    id: UUID
+    criteria_revision: int = Field(gt=0)
+    expected_revision: int = Field(ge=0)
+    priorities: str = Field(min_length=1,max_length=2000)
+    consent: Literal[True]
+
+    @field_validator('priorities',mode='before')
+    @classmethod
+    def valid_priorities(cls,value):
+        value=value.strip() if isinstance(value,str) else value
+        if not value:raise ValueError('Describe your purchasing priorities.')
+        return value
+
+
+class AIWeightsSave(ManualWeightsSave):
+    suggestion_id: UUID
+    expected_weight_revision: int = Field(ge=0)
+    notes: str = Field(default='',max_length=2000)
+
+
+def ai_context(connection,project_id):
+    import ai_weighting
+    criteria=weighting_criteria(connection,project_id)
+    selected=[c for c in criteria['configuration']['criteria'] if c['selected']]
+    category=connection.execute('SELECT category FROM purchasing_projects WHERE id=%s',(project_id,)).fetchone()['category']
+    context=ai_weighting.input_context(category,selected)
+    return criteria,selected,context,ai_weighting.fingerprint(context,criteria['revision'])
+
+
+def ai_state(connection,project_id):
+    import cloudflare_ai
+    criteria,selected,context,token=ai_context(connection,project_id)
+    draft=connection.execute('SELECT * FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
+    weights=connection.execute('SELECT * FROM project_weights WHERE project_id=%s',(project_id,)).fetchone()
+    current=bool(draft and draft['context']==token)
+    suggestion=connection.execute('SELECT * FROM project_ai_suggestions WHERE id=%s AND project_id=%s',(draft['suggestion_id'],project_id)).fetchone() if draft else None
+    approved=bool(current and weights and weights['approved'] and weights['method']=='ai' and weights['criteria_revision']==criteria['revision'] and weights['provenance'].get('ai_revision')==draft['revision'])
+    try:cloudflare_ai.settings();configured=True
+    except cloudflare_ai.AIConnectionError:configured=False
+    return {'criteria':selected,'criteria_revision':criteria['revision'],'context':context,'revision':draft['revision'] if draft else 0,
+            'weight_revision':weights['revision'] if weights else 0,'weights':draft['weights'] if current else {c['id']:'0.00' for c in selected},
+            'notes':draft['notes'] if current else '', 'suggestion':{'id':str(suggestion['id']),**suggestion['snapshot']} if suggestion else None,
+            'approved':approved,'needs_review':bool(draft and not current),'active_method':weights['method'] if weights else None,'configured':configured}
+
+
+def record_ai_version(connection,project_id,revision,snapshot):
+    from psycopg.types.json import Jsonb
+    connection.execute('INSERT INTO project_ai_versions(project_id,revision,snapshot) VALUES (%s,%s,%s)',(project_id,revision,Jsonb(snapshot)))
+
+
+@app.get('/api/projects/{project_id}/weights/ai')
+def get_ai_weights(project_id:UUID):
+    with database.connect() as connection:return ai_state(connection,project_id)
+
+
+@app.post('/api/projects/{project_id}/weights/ai/suggest')
+def suggest_ai_weights(project_id:UUID,payload:AISuggestionRequest):
+    import ai_weighting,cloudflare_ai
+    from psycopg.types.json import Jsonb
+    request=payload.model_dump(mode='json')
+    with database.connect() as connection:
+        criteria,selected,context,token=ai_context(connection,project_id)
+        def existing():
+            found=connection.execute('SELECT * FROM project_ai_suggestions WHERE id=%s',(payload.id,)).fetchone()
+            if not found:return None
+            if found['project_id']!=project_id or found['request']!=request:raise HTTPException(409,'This request identifier was already used. Reload before requesting suggestions.')
+            draft=connection.execute('SELECT * FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
+            if not draft or draft['suggestion_id']!=payload.id:raise HTTPException(409,'This suggestion was already saved. Reload the current AI draft.')
+            return ai_state(connection,project_id)
+        found=existing()
+        if found:return found
+        draft=connection.execute('SELECT revision FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
+        if payload.criteria_revision!=criteria['revision'] or payload.expected_revision!=(draft['revision'] if draft else 0):
+            raise HTTPException(409,'Criteria or the AI draft changed. Reload before requesting suggestions.')
+    # The remote call runs outside the transaction: it must not hold project locks for 25 seconds.
+    try:result=ai_weighting.generate_suggestion(context,payload.priorities)
+    except cloudflare_ai.AIConnectionError as error:raise HTTPException(503,str(error)) from None
+    with database.connect() as connection:
+        _,_,_,latest_token=ai_context(connection,project_id)
+        found=existing()
+        if found:return found
+        draft=connection.execute('SELECT revision FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
+        if token!=latest_token or payload.expected_revision!=(draft['revision'] if draft else 0):
+            raise HTTPException(409,'Project context or AI draft changed during generation. Your saved work was kept. Reload and try again.')
+        snapshot={'provider':'Cloudflare Workers AI','model':cloudflare_ai.MODEL,'generated_at':datetime.now(timezone.utc).isoformat(),'priorities':payload.priorities,'input_context':context,'criteria_revision':payload.criteria_revision,**result}
+        connection.execute('INSERT INTO project_ai_suggestions(id,project_id,request,context,snapshot) VALUES (%s,%s,%s,%s,%s)',(payload.id,project_id,Jsonb(request),token,Jsonb(snapshot)))
+        revision=payload.expected_revision+1
+        connection.execute('''INSERT INTO project_ai_drafts(project_id,suggestion_id,weights,context,revision) VALUES (%s,%s,%s,%s,%s)
+            ON CONFLICT(project_id) DO UPDATE SET suggestion_id=EXCLUDED.suggestion_id,weights=EXCLUDED.weights,notes='',context=EXCLUDED.context,revision=EXCLUDED.revision,updated_at=clock_timestamp()''',
+            (project_id,payload.id,Jsonb(result['weights']),token,revision))
+        record_ai_version(connection,project_id,revision,{'event':'suggestion','suggestion':snapshot,'weights':result['weights'],'approved':False,'notes':''})
+        touch_project(connection,project_id)
+        return ai_state(connection,project_id)
+
+
+@app.put('/api/projects/{project_id}/weights/ai')
+def save_ai_weights(project_id:UUID,payload:AIWeightsSave):
+    from psycopg.types.json import Jsonb
+    with database.connect() as connection:
+        criteria,selected,_,token=ai_context(connection,project_id)
+        draft=connection.execute('SELECT * FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
+        suggestion=connection.execute('SELECT * FROM project_ai_suggestions WHERE id=%s AND project_id=%s',(payload.suggestion_id,project_id)).fetchone()
+        if not draft or not suggestion or suggestion['context']!=token or draft['context']!=token or payload.criteria_revision!=criteria['revision']:
+            raise HTTPException(409,'The AI suggestion is missing or out of date. Reload and request a current suggestion.')
+        if draft['suggestion_id']!=payload.suggestion_id or set(payload.weights)!={c['id'] for c in selected}:
+            raise HTTPException(422,'Use the current AI suggestion and exactly the selected scoring criteria.')
+        values={k:format(v,'.2f') for k,v in payload.weights.items()};notes=payload.notes.strip()
+        current=ai_state(connection,project_id)
+        if draft['weights']==values and draft['notes']==notes and current['approved']==payload.approved:return current
+        if payload.expected_revision!=draft['revision'] or payload.expected_weight_revision!=current['weight_revision']:
+            raise HTTPException(409,'AI draft or active weights changed in another window. Your edits are kept. Reload before saving.')
+        revision=draft['revision']+1
+        connection.execute('UPDATE project_ai_drafts SET weights=%s,notes=%s,revision=%s,updated_at=clock_timestamp() WHERE project_id=%s',(Jsonb(values),notes,revision,project_id))
+        snapshot={'ai_revision':revision,'suggestion_id':str(payload.suggestion_id),'suggestion':suggestion['snapshot'],'applied_weights':values,'notes':notes,'context':token, 'reviewer':'Demo User (unauthenticated)','reviewed_at':datetime.now(timezone.utc).isoformat() if payload.approved else None}
+        if payload.approved:
+            connection.execute('''INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved,method,provenance) VALUES (%s,%s,%s,1,true,'ai',%s)
+                ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,criteria_revision=EXCLUDED.criteria_revision,
+                revision=project_weights.revision+1,approved=true,method='ai',provenance=EXCLUDED.provenance,updated_at=clock_timestamp()''',
+                (project_id,Jsonb(values),payload.criteria_revision,Jsonb(snapshot)))
+        elif current['approved']:
+            connection.execute('UPDATE project_weights SET approved=false,revision=revision+1,updated_at=clock_timestamp() WHERE project_id=%s',(project_id,))
+        record_ai_version(connection,project_id,revision,{'event':'approval' if payload.approved else 'draft','suggestion':suggestion['snapshot'],'weights':values,'notes':notes,'approved':payload.approved})
+        touch_project(connection,project_id)
+        return ai_state(connection,project_id)
+
+
+@app.get('/api/projects/{project_id}/weights/ai/history')
+def get_ai_history(project_id:UUID):
+    with database.connect() as connection:
+        require_project(connection,project_id)
+        rows=connection.execute('SELECT revision,snapshot,created_at FROM project_ai_versions WHERE project_id=%s ORDER BY revision DESC LIMIT 20',(project_id,)).fetchall()
         return {'versions':[{'revision':r['revision'],'snapshot':r['snapshot'],'created_at':r['created_at'].isoformat()} for r in rows]}

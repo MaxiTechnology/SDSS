@@ -1,7 +1,7 @@
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const r = await fetch(path, {
     ...options,
-    signal: AbortSignal.timeout(20000),
+    signal: options?.signal ?? AbortSignal.timeout(20000),
   });
   if (!r.ok) {
     const b = await r.json().catch(() => ({}));

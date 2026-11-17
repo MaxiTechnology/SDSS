@@ -163,6 +163,29 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (9)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 10").fetchone():
+            connection.execute("""
+                ALTER TABLE project_weights DROP CONSTRAINT project_weights_method_check;
+                ALTER TABLE project_weights ADD CONSTRAINT project_weights_method_check CHECK (method IN ('manual','ahp','ai'));
+                CREATE TABLE project_ai_suggestions (
+                    id uuid PRIMARY KEY, project_id uuid NOT NULL REFERENCES purchasing_projects(id),
+                    request jsonb NOT NULL, context text NOT NULL, snapshot jsonb NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE TABLE project_ai_drafts (
+                    project_id uuid PRIMARY KEY REFERENCES purchasing_projects(id),
+                    suggestion_id uuid NOT NULL REFERENCES project_ai_suggestions(id),
+                    weights jsonb NOT NULL, notes text NOT NULL DEFAULT '', context text NOT NULL,
+                    revision integer NOT NULL CHECK (revision>0), updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE TABLE project_ai_versions (
+                    project_id uuid NOT NULL REFERENCES purchasing_projects(id), revision integer NOT NULL,
+                    snapshot jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    PRIMARY KEY(project_id,revision)
+                );
+                INSERT INTO sdss_migrations(version) VALUES (10)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

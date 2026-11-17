@@ -34,6 +34,14 @@ def settings():
         raise AIConnectionError('AI is not configured. Open Connect AI service.cmd to save the private connection.') from None
 
 
+def unique_json_pairs(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result:raise ValueError('Duplicate JSON key')
+        result[key]=value
+    return result
+
+
 def generate(config, messages, max_tokens=1024):
     config=validate_settings(config['account_id'],config['token'])
     request=urllib.request.Request(
@@ -44,8 +52,10 @@ def generate(config, messages, max_tokens=1024):
         with urllib.request.urlopen(request,timeout=25) as response:
             content=response.read(1048577)
         if len(content)>1048576:raise AIConnectionError('The AI response was too large. Please retry.')
-        data=json.loads(content)
+        data=json.loads(content,object_pairs_hook=unique_json_pairs)
         text=data.get('result',{}).get('response')
+        # Cloudflare can return JSON output as an object instead of a JSON string.
+        if isinstance(text,dict):text=json.dumps(text)
         if data.get('success') is not True or not isinstance(text,str) or not text.strip():
             raise AIConnectionError('The AI service did not return a usable response. Existing settings were kept.')
         return text
