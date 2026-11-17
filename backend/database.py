@@ -86,6 +86,21 @@ def migrate(connection):
             """)
 
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 5").fetchone():
+            connection.execute("""
+                CREATE TABLE supplier_reviews (
+                    supplier_id uuid PRIMARY KEY REFERENCES project_suppliers(id) ON DELETE CASCADE,
+                    determinations jsonb NOT NULL,
+                    criteria_revision integer NOT NULL,
+                    supplier_updated_at timestamptz NOT NULL,
+                    revision integer NOT NULL CHECK (revision > 0),
+                    reviewer text NOT NULL DEFAULT 'Demo User (unauthenticated)',
+                    updated_at timestamptz NOT NULL DEFAULT now()
+                );
+                INSERT INTO sdss_migrations(version) VALUES (5)
+            """)
+
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

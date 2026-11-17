@@ -23,5 +23,5 @@ export function ManualWeighting({projectId}:{projectId:string}){
  <p className={valid&&total===10000?'success':'error'} role="status">Total Weight: {(total/100).toFixed(2)}% — {valid&&total===10000?'Valid (100%)':'Adjust weights to total 100% before approval.'}</p>
  <label className="inline-check"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/>I have reviewed these weights and approve their use for evaluation.</label></fieldset>
  <footer><button className="secondary" disabled={busy} onClick={()=>{if(!dirty||confirm('Discard unsaved weights?'))location.hash=`/projects/${projectId}/criteria`;}}>← Back to Criteria</button><div className="actions"><button className="secondary" disabled={busy||!valid} onClick={()=>void save(false)}>Save Draft</button><button className="primary" disabled={busy||!valid||total!==10000||!reviewed} onClick={()=>void save(true)}>Approve Weights</button></div></footer>
- <p className="supplier-note">Eligibility review will be added in the next implementation stage.</p></section>;
+ <button className="primary" disabled={busy||dirty||!saved.approved} onClick={()=>location.hash=`/projects/${projectId}/eligibility`}>Continue to Eligibility Review →</button></section>;
 }

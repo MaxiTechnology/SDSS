@@ -359,6 +359,97 @@ def get_manual_weights(project_id: UUID):
     return weights_json(row, criteria)
 
 
+class CheckReview(BaseModel):
+    status: Literal['pending', 'passed', 'failed'] = 'pending'
+    notes: str = Field(default='', max_length=2000)
+
+    @model_validator(mode='after')
+    def require_notes(self):
+        self.notes = self.notes.strip()
+        if self.status != 'pending' and not self.notes:
+            raise ValueError('Record what you reviewed before passing or failing a check.')
+        return self
+
+
+class EligibilityReviewSave(BaseModel):
+    currency: Literal['USD','EUR','GBP','RUB','GHS']
+    checks: dict[str, CheckReview] = Field(default_factory=dict, max_length=20)
+    total_price: Decimal | None = Field(default=None, ge=0, max_digits=16, decimal_places=2, allow_inf_nan=False)
+    criteria_revision: int = Field(gt=0)
+    supplier_updated_at: datetime
+    expected_revision: int = Field(ge=0)
+
+
+def eligibility_context(connection, project_id):
+    criteria = weighting_criteria(connection, project_id)
+    criteria['currency'] = connection.execute('SELECT currency FROM purchasing_projects WHERE id=%s', (project_id,)).fetchone()['currency']
+    weights = connection.execute('SELECT * FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
+    if not weights or not weights['approved'] or weights['criteria_revision'] != criteria['revision']:
+        raise HTTPException(422, 'Approve weights for the current criteria before reviewing eligibility.')
+    return criteria
+
+
+def eligibility_supplier(supplier, review, criteria):
+    configuration = criteria['configuration']
+    current = bool(review and review['criteria_revision'] == criteria['revision'] and review['supplier_updated_at'] == supplier['updated_at'] and review['determinations'].get('currency') == criteria['currency'])
+    stored = review['determinations'] if current else {}
+    checks = {c['id']: stored.get('checks', {}).get(c['id'], {'status':'pending','notes':''}) for c in configuration['mandatory_checks']}
+    statuses = [c['status'] for c in checks.values()]
+    price = stored.get('total_price')
+    price_status = None
+    if configuration['maximum_price'] is not None:
+        price_status = 'pending' if price is None else 'passed' if Decimal(price) <= Decimal(configuration['maximum_price']) else 'failed'
+        statuses.append(price_status)
+    status = 'ineligible' if 'failed' in statuses else 'pending' if 'pending' in statuses else 'eligible'
+    return {**supplier_json(supplier), 'checks':checks, 'total_price':price, 'price_status':price_status,
+            'eligibility':status, 'revision':review['revision'] if review else 0,
+            'needs_review':bool(review and not current), 'reviewer':review['reviewer'] if current else None,
+            'reviewed_at':review['updated_at'].isoformat() if current else None}
+
+
+@app.get('/api/projects/{project_id}/eligibility')
+def get_eligibility(project_id: UUID):
+    with database.connect() as connection:
+        criteria = eligibility_context(connection, project_id)
+        suppliers = connection.execute('SELECT * FROM project_suppliers WHERE project_id=%s ORDER BY created_at,id', (project_id,)).fetchall()
+        reviews = {r['supplier_id']:r for r in connection.execute('SELECT r.* FROM supplier_reviews r JOIN project_suppliers s ON s.id=r.supplier_id WHERE s.project_id=%s', (project_id,)).fetchall()}
+        rows = [eligibility_supplier(s, reviews.get(s['id']), criteria) for s in suppliers]
+        currency = connection.execute('SELECT currency FROM purchasing_projects WHERE id=%s', (project_id,)).fetchone()['currency']
+    eligible = sum(s['eligibility'] == 'eligible' for s in rows)
+    return {'suppliers':rows, 'mandatory_checks':criteria['configuration']['mandatory_checks'],
+            'maximum_price':criteria['configuration']['maximum_price'], 'currency':currency,
+            'criteria_revision':criteria['revision'], 'eligible_count':eligible, 'ready':eligible >= 2}
+
+
+@app.put('/api/projects/{project_id}/eligibility/{supplier_id}')
+def save_eligibility(project_id: UUID, supplier_id: UUID, payload: EligibilityReviewSave):
+    from psycopg.types.json import Jsonb
+    with database.connect() as connection:
+        criteria = eligibility_context(connection, project_id)
+        supplier = connection.execute('SELECT * FROM project_suppliers WHERE id=%s AND project_id=%s', (supplier_id,project_id)).fetchone()
+        if not supplier:
+            raise HTTPException(404, 'Supplier not found in this project.')
+        if payload.criteria_revision != criteria['revision'] or payload.supplier_updated_at != supplier['updated_at'] or payload.currency != criteria['currency']:
+            raise HTTPException(409, 'Supplier or criteria changed. Reload and review again. Your entries are kept.')
+        if set(payload.checks) != {c['id'] for c in criteria['configuration']['mandatory_checks']}:
+            raise HTTPException(422, 'Review exactly the configured mandatory checks.')
+        if criteria['configuration']['maximum_price'] is None and payload.total_price is not None:
+            raise HTTPException(422, 'No mandatory price limit is configured.')
+        determinations = payload.model_dump(mode='json', include={'checks','total_price','currency'})
+        review = connection.execute('SELECT * FROM supplier_reviews WHERE supplier_id=%s FOR UPDATE', (supplier_id,)).fetchone()
+        if review and review['criteria_revision'] == payload.criteria_revision and review['supplier_updated_at'] == supplier['updated_at'] and review['determinations'] == determinations:
+            return eligibility_supplier(supplier, review, criteria)
+        if payload.expected_revision != (review['revision'] if review else 0):
+            raise HTTPException(409, 'Review changed in another window. Reload before saving. Your entries are kept.')
+        review = connection.execute('''INSERT INTO supplier_reviews(supplier_id,determinations,criteria_revision,supplier_updated_at,revision)
+            VALUES (%s,%s,%s,%s,1) ON CONFLICT(supplier_id) DO UPDATE SET determinations=EXCLUDED.determinations,
+            criteria_revision=EXCLUDED.criteria_revision,supplier_updated_at=EXCLUDED.supplier_updated_at,
+            revision=supplier_reviews.revision+1,updated_at=clock_timestamp() RETURNING *''',
+            (supplier_id,Jsonb(determinations),payload.criteria_revision,supplier['updated_at'])).fetchone()
+        touch_project(connection, project_id)
+    return eligibility_supplier(supplier, review, criteria)
+
+
 @app.put("/api/projects/{project_id}/weights/manual")
 def save_manual_weights(project_id: UUID, payload: ManualWeightsSave):
     from psycopg.types.json import Jsonb

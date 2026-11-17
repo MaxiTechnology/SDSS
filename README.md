@@ -15,9 +15,13 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-AI/AHP weighting, eligibility enforcement, TOPSIS, sensitivity, approvals and reports remain future tickets. Mandatory requirements and maximum price are configuration only until eligibility is implemented. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
+AI/AHP weighting, TOPSIS, sensitivity, final decisions and reports remain future tickets. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
 
-Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Later evaluation stages remain unavailable.
+Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Approved weights unlock supplier eligibility review.
+
+Supplier eligibility review saves Passed/Pending/Failed determinations and required notes for passed or failed mandatory checks. A configured maximum total price is checked automatically; equality is allowed, and missing price stays Pending. Only fully eligible suppliers count toward the minimum pool of two. With no mandatory requirements or price limit, suppliers qualify without checks. Criteria, supplier or currency changes require affected reviews to be repeated. Saves reject stale edits and support safe retries.
+
+Review decisions are attributed to Demo User (unauthenticated), with a saved timestamp. Document uploads, authenticated reviewers, immutable audit history and evaluation matrix entry are still pending; SDSS-011 is not fully complete. These demonstration reviews must use synthetic data.
 
 ## Set up on another computer
 
@@ -25,7 +29,7 @@ Manual weighting supports saved drafts, two-decimal percentage inputs, equal dis
 2. Run `npm ci` inside `frontend`.
 3. Inside `backend`, run `python -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt`.
 4. Double-click `Connect cloud database.cmd` and enter your Neon connection strings privately. Alternatively set the backend `DATABASE_URL` environment variable. Never put credentials in frontend settings.
-5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier, criteria and manual-weight storage migrations. It is safe to run again.
+5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier, criteria, manual-weight and eligibility-review storage migrations. It is safe to run again.
 
 Database setup utilities only verify and save the connection. The separate migration command creates application tables. Existing data is preserved.
 
@@ -76,3 +80,5 @@ Tested runtime: Node 26.13.0, npm 11.20.0, Python 3.15.2 on Windows. Dependency 
 Trello tracks implementation tickets. Figma is the design reference. The implemented project screen references are `33:13004` and `33:11588` in the SDSS Figma file. SVG icons are exported design assets.
 
 Supplier screens follow the existing application layout and supplied screenshots. Exact Figma visual verification remains pending because design-file access was unavailable. SDSS-006 is implemented for supplier records; downstream result invalidation depends on the later calculation tickets.
+
+Eligibility verification covers cancellation, required review notes, failed-save recovery and reopening after refresh. Isolated database checks cover approval gating, pass/fail/pending derivation, exact price limits, safe retries, revision conflicts, project isolation and review invalidation.
