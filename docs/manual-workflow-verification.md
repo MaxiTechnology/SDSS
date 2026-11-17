@@ -21,8 +21,8 @@ The API journey and browser page checks complement each other. There is no claim
 ## Remaining work
 
 - SDSS-009: AHP comparisons, diagnostics, persistence, approval and saved version history were added after the manual acceptance check. Separate tests verify the AHP path. The user completed the 40/20/20/10/10 comparison example, approved it, recalculated rankings, confirmed decision version 2 and downloaded its AHP report. CR display and pagination were subsequently refined.
-- SDSS-010: AI suggestion generation, strict validation, adjustment, provenance/history and explicit approval are implemented. The user verified Cloudflare setup; a live synthetic suggestion and isolated API/browser checks passed. User acceptance of the full AI journey remains pending. Manual and AHP fallback work.
-- SDSS-011: evidence file upload/storage and access scope. Current pass/fail reviews use notes without attachments.
+- SDSS-010: AI suggestion generation, strict validation, adjustment, provenance/history and explicit approval are implemented. The user verified Cloudflare setup; a live synthetic suggestion and isolated API/browser checks passed. The user completed AI approval, decision version 3 and its PDF report. Manual and AHP fallback work.
+- SDSS-011: PDF/text upload, retained cloud storage, version-bound reviews and historical downloads are implemented. Authenticated access scope remains pending; use synthetic documents only.
 - SDSS-014: sensitivity trials are temporary; reports truthfully identify the absence of saved findings.
 - SDSS-018: real dashboard metrics, derived project statuses, status filters and workflow/report navigation are implemented. Global secondary supplier/evaluation/report/settings lists remain disabled; user acceptance of dashboard and filtering is pending.
 - SDSS-017: full AHP/AI journeys, broader accessibility/mobile review and recovery/deployment verification remain incomplete.
@@ -39,9 +39,14 @@ Do not mark the whole project or SDSS-017 Done based on the manual journey alone
 - One valid live Cloudflare suggestion was generated with synthetic two-criterion context after handling structured provider response objects. This was a direct provider check, not a request using the user's project or suppliers.
 - Migration 10 was applied. No real project weighting, evaluation matrix, ranking or purchasing decision was altered by verification.
 - AI-assisted PDF layout was rendered and visually inspected. The report distinguishes original suggestions and approved weights and includes provider/model, priorities, explanations and review notes.
-- User acceptance of AI generation, approval and the downstream report is pending. SDSS-017 and the whole project remain incomplete.
+- The user subsequently verified AI generation, approval, decision version 3 and its downstream report. SDSS-017 and the whole project remain incomplete.
 
 
 ## Dashboard implementation verification - 2026-11-18
 
 The read-only cloud projection identified the user project as Approved and counted three supplier entries. No saved project, weights, matrix or decision was modified. The isolated manual journey verified Draft -> Evaluated -> Approved -> Needs review; the decision journey verified Deferred. Default backend checks passed (53 passed, seven opt-in integration skips). Browser checks cover totals, count-card filters, category search, empty results, six-row pagination, workflow navigation, and unavailable-state retry. User acceptance remains pending; do not mark the full release complete.
+
+
+## Evidence upload verification - 2026-11-18
+
+Default backend checks: 56 passed, eight opt-in cloud skips. Browser suite: 15 passed. Evidence checks cover supported formats, size/page limits, exact file hashes, retry identity, stale review versions, download/removal and preserved historical attachment metadata. The isolated cloud journey checks retained downloads after archival and supplier deletion, review invalidation and storage quotas. User acceptance of uploads remains pending.

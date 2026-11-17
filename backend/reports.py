@@ -42,6 +42,8 @@ def report_data(row):
         'rankings': ranking['result']['rows'],
         'values': [{'supplier': s['name'], 'criterion': c['name'], 'unit': c['unit'], 'value': ranking['entries'][s['id']][c['id']]} for s in ranking['suppliers'] for c in criteria],
         'eligibility_notes': eligibility_notes,
+        'evidence_files': snapshot.get('evidence_files',[]),
+        'evidence_note': ('Evidence attachments were not captured in this older decision snapshot.' if 'evidence_files' not in snapshot else 'File metadata below was recorded at confirmation; later file changes do not alter this saved record.' if snapshot['evidence_files'] else 'No evidence attachments were recorded at confirmation.'),
         'sensitivity': 'No sensitivity findings were saved with this decision. Simulations are temporary; no conclusion about ranking stability can be inferred from this report.',
         'notice': 'Synthetic-data demonstration. Recorded as an unauthenticated demo user; this is not a purchase order. This report reproduces a saved version and does not certify that it is the latest decision or that current inputs are unchanged.',
     }
@@ -104,6 +106,9 @@ def render_pdf(report):
         section('AI assistance - reviewed by a human', [f"Provider: {a['provider']} | Model: {a['model']}",f"Purchasing priorities sent: {a['priorities']}", a['summary'], 'Explanations describe the original AI suggestions. Approved weights may have been adjusted by the reviewer.',f"Review notes: {a['review_notes'] or 'No additional review notes.'}"])
         for c in report['criteria']:
             section(c['name'], [f"Original AI weight: {a['weights'][c['id']]}% | Approved weight: {c['weight']}%", a['rationales'][c['id']]])
+    section('Evidence files recorded with this decision', [report['evidence_note']])
+    for file in report['evidence_files']:
+        section(file['filename'], [f"Supplier: {file['supplier_name']} | Requirement: {file['check_name'] or 'General supplier evidence'}", f"File ID: {file['id']} | Size: {file['size_bytes']} bytes", f"SHA-256: {file['sha256']}", f"Uploaded: {file['created_at']} | By: {file['uploaded_by']}"])
     section('Eligibility at confirmation', report['eligibility_notes'])
     section('Sensitivity analysis', [report['sensitivity']])
     section('Report limitations', [report['notice']])

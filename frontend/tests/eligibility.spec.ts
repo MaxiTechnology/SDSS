@@ -4,6 +4,7 @@ const project={id:'p1',reference:'PRJ-T',name:'Test',currency:'USD',category:'',
 let row:any={id:'s1',name:'Supplier A',updated_at:project.updated_at,checks:{cert:{status:'pending',notes:''}},total_price:null,price_status:'pending',eligibility:'pending',revision:0,needs_review:false,reviewer:null,reviewed_at:null};let fail=true;
 await page.route('**/api/projects**',async route=>{
 const url=route.request().url();
+if(url.endsWith('/evidence'))return route.fulfill({json:{files:[],evidence_revision:0,limits:{used_bytes:0,max_bytes:20971520,file_max_bytes:2097152,active_limit:10,stored_files:0,stored_file_limit:100}}});
 if(url.endsWith('/eligibility'))return route.fulfill({json:{suppliers:[row],mandatory_checks:[{id:'cert',name:'Certificate',requirement:'Valid sample certificate'}],maximum_price:'100',currency:'USD',criteria_revision:1,eligible_count:row.eligibility==='eligible'?1:0,ready:false}});
 if(url.endsWith('/eligibility/s1')){
 if(fail){fail=false;return route.fulfill({status:503,json:{detail:'Storage unavailable'}});}

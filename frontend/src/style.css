@@ -667,3 +667,7 @@ dialog::backdrop { background:#0006; }
 .chip[data-status="Approved"] {background:#dcfce7;color:#166534;}
 .chip[data-status="Deferred"] {background:#fef3c7;color:#92400e;}
 .chip[data-status="Needs review"] {background:#fee2e2;color:#991b1b;}
+
+.evidence-files {border-top:1px solid #dce2ed;margin-top:20px;padding-top:16px;}
+.evidence-files li {margin:12px 0;overflow-wrap:anywhere;}
+.evidence-files button {margin:5px;}

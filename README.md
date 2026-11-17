@@ -15,13 +15,13 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-Manual weighting, eligibility, evaluation matrices, TOPSIS rankings, temporary sensitivity analysis, versioned decisions and saved PDF reports are implemented. Manual, AHP and AI-assisted weighting are implemented. Evidence uploads remain unfinished. The project budget is a planning amount unless a separate mandatory maximum price is enabled. Changes to evaluation inputs invalidate affected approvals, matrices, rankings and decisions while preserving historical reports.
+Manual weighting, eligibility, evaluation matrices, TOPSIS rankings, temporary sensitivity analysis, versioned decisions and saved PDF reports are implemented. Manual, AHP and AI-assisted weighting are implemented. Supplier evidence uploads are implemented for synthetic PDF and text documents. The project budget is a planning amount unless a separate mandatory maximum price is enabled. Changes to evaluation inputs invalidate affected approvals, matrices, rankings and decisions while preserving historical reports.
 
 Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Approved weights unlock supplier eligibility review.
 
 Supplier eligibility review saves Passed/Pending/Failed determinations and required notes for passed or failed mandatory checks. A configured maximum total price is checked automatically; equality is allowed, and missing price stays Pending. Only fully eligible suppliers count toward the minimum pool of two. With no mandatory requirements or price limit, suppliers qualify without checks. Criteria, supplier or currency changes require affected reviews to be repeated. Saves reject stale edits and support safe retries.
 
-Review decisions are attributed to Demo User (unauthenticated), with a saved timestamp. Document uploads, authenticated reviewers, and immutable audit history are still pending; SDSS-011 is not fully complete. These demonstration reviews must use synthetic data.
+Review decisions are attributed to Demo User (unauthenticated), with a saved timestamp. Evidence documents can be uploaded and retained with historical decisions. Authenticated reviewers and immutable audit history are still pending; SDSS-011 is not fully complete. These demonstration reviews must use synthetic data.
 
 ## Set up on another computer
 
@@ -175,4 +175,15 @@ Project lists support search by name/reference/category, status filtering, clear
 
 The project-list API adds workflow_status, workflow_stage, resume_path, last_activity_at and decision_id; the legacy stored status field remains Draft for compatibility. Last activity includes calculation and decision timestamps without changing the project-edit concurrency timestamp. Bulk reads use one repeatable-read, read-only transaction and share matrix-context hashing and eligibility validation with calculation endpoints. They do not acquire project write locks, call AI providers or recalculate TOPSIS. No migration is needed.
 
-Verification covers pure workflow states, AI/category and supplier invalidation, cloud manual/decision journeys including deferral, and browser count/filter/search/pagination/resume/unavailable-state recovery. Global supplier, evaluation, report-list and settings navigation remain visibly disabled; project-scoped features remain reachable from the workflow. This does not complete the outstanding evidence uploads or remaining release checks.
+Verification covers pure workflow states, AI/category and supplier invalidation, cloud manual/decision journeys including deferral, and browser count/filter/search/pagination/resume/unavailable-state recovery. Global supplier, evaluation, report-list and settings navigation remain visibly disabled; project-scoped features remain reachable from the workflow. This does not complete the remaining release checks.
+
+
+## Supplier evidence documents
+
+Apply migration 11 with the backend migration command before using uploads. In a supplier eligibility review, choose a synthetic PDF or UTF-8 text file, optionally associate it with a mandatory check, and click Upload. Selecting a file alone does not upload it. Files save immediately; cancelling the review discards unsaved review notes, not uploaded files. A synthetic text example is available in the upload panel.
+
+Limits are 2 MiB per file, 1–50 pages for unencrypted PDFs, ten active documents per supplier, and 20 MiB / 100 retained documents per project. Format validation is not malware scanning. Use synthetic documents only: this local demonstration has no authentication or reviewer access controls. Files are stored in the configured cloud PostgreSQL database, not in Git; contents are never sent to the AI weighting service.
+
+Upload and removal advance the supplier evidence version. Existing mandatory-check reviews must be reviewed and saved again against that version; an upload never passes a requirement automatically. With no mandatory requirements, general attachments do not disqualify suppliers. Removal archives documents, so historical decision downloads remain available, including after a supplier is removed. Retained files count toward project limits. Reports capture attachment identity, size, hash and review context without embedding file content; older reports identify missing historical attachment metadata.
+
+Verification includes isolated cloud storage, upload retries, stale-version rejection, review invalidation, historical downloads after removal, quota enforcement and PDF metadata, plus browser upload/retry/download/removal checks.

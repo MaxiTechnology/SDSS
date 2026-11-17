@@ -186,6 +186,25 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (10)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 11").fetchone():
+            connection.execute("""
+                ALTER TABLE project_suppliers ADD COLUMN evidence_revision integer NOT NULL DEFAULT 0;
+                ALTER TABLE supplier_reviews ADD COLUMN evidence_revision integer NOT NULL DEFAULT 0;
+                CREATE TABLE supplier_evidence (
+                    id uuid PRIMARY KEY, project_id uuid NOT NULL REFERENCES purchasing_projects(id),
+                    supplier_id uuid NOT NULL, supplier_name text NOT NULL,
+                    filename text NOT NULL, mime_type text NOT NULL,
+                    size_bytes integer NOT NULL CHECK (size_bytes>0 AND size_bytes<=2097152),
+                    sha256 varchar(64) NOT NULL, content bytea NOT NULL,
+                    check_id text, check_name text, criteria_revision integer NOT NULL,
+                    uploaded_by text NOT NULL DEFAULT 'Demo User (unauthenticated)',
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(), archived_at timestamptz,
+                    CHECK (octet_length(content)=size_bytes)
+                );
+                CREATE INDEX supplier_evidence_project_supplier_idx ON supplier_evidence(project_id,supplier_id);
+                INSERT INTO sdss_migrations(version) VALUES (11)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

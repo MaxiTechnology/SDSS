@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 import database
@@ -197,6 +197,7 @@ def remove_supplier(project_id: UUID, supplier_id: UUID, expected_updated_at: da
             return Response(status_code=204)
         if row["updated_at"] != expected_updated_at:
             raise HTTPException(409,"This supplier changed in another window. Refresh before removing it.")
+        connection.execute("UPDATE supplier_evidence SET archived_at=clock_timestamp() WHERE supplier_id=%s AND project_id=%s AND archived_at IS NULL",(supplier_id,project_id))
         connection.execute("DELETE FROM project_suppliers WHERE id=%s AND project_id=%s",(supplier_id,project_id))
         touch_project(connection,project_id)
     return Response(status_code=204)
@@ -373,6 +374,7 @@ class CheckReview(BaseModel):
 
 
 class EligibilityReviewSave(BaseModel):
+    evidence_revision: int = Field(default=0,ge=0)
     currency: Literal['USD','EUR','GBP','RUB','GHS']
     checks: dict[str, CheckReview] = Field(default_factory=dict, max_length=20)
     total_price: Decimal | None = Field(default=None, ge=0, max_digits=16, decimal_places=2, allow_inf_nan=False)
@@ -399,7 +401,7 @@ def eligibility_context(connection, project_id):
 
 def eligibility_supplier(supplier, review, criteria):
     configuration = criteria['configuration']
-    current = bool(review and review['criteria_revision'] == criteria['revision'] and review['supplier_updated_at'] == supplier['updated_at'] and review['determinations'].get('currency') == criteria['currency'])
+    current = bool(review and review['criteria_revision'] == criteria['revision'] and review['supplier_updated_at'] == supplier['updated_at'] and review.get('evidence_revision',0) == supplier.get('evidence_revision',0) and review['determinations'].get('currency') == criteria['currency'])
     stored = review['determinations'] if current else {}
     checks = {c['id']: stored.get('checks', {}).get(c['id'], {'status':'pending','notes':''}) for c in configuration['mandatory_checks']}
     statuses = [c['status'] for c in checks.values()]
@@ -411,6 +413,7 @@ def eligibility_supplier(supplier, review, criteria):
     status = 'ineligible' if 'failed' in statuses else 'pending' if 'pending' in statuses else 'eligible'
     return {**supplier_json(supplier), 'checks':checks, 'total_price':price, 'price_status':price_status,
             'eligibility':status, 'revision':review['revision'] if review else 0,
+            'evidence_revision':supplier.get('evidence_revision',0), 'evidence_files':stored.get('evidence_files',[]),
             'needs_review':bool(review and not current), 'reviewer':review['reviewer'] if current else None,
             'reviewed_at':review['updated_at'].isoformat() if current else None}
 
@@ -438,23 +441,26 @@ def save_eligibility(project_id: UUID, supplier_id: UUID, payload: EligibilityRe
         supplier = connection.execute('SELECT * FROM project_suppliers WHERE id=%s AND project_id=%s', (supplier_id,project_id)).fetchone()
         if not supplier:
             raise HTTPException(404, 'Supplier not found in this project.')
-        if payload.criteria_revision != criteria['revision'] or payload.supplier_updated_at != supplier['updated_at'] or payload.currency != criteria['currency']:
-            raise HTTPException(409, 'Supplier or criteria changed. Reload and review again. Your entries are kept.')
+        if payload.criteria_revision != criteria['revision'] or payload.supplier_updated_at != supplier['updated_at'] or payload.currency != criteria['currency'] or payload.evidence_revision != supplier.get('evidence_revision',0):
+            raise HTTPException(409, 'Supplier, criteria or evidence changed. Cancel and refresh the review. Your entries are kept.')
         if set(payload.checks) != {c['id'] for c in criteria['configuration']['mandatory_checks']}:
             raise HTTPException(422, 'Review exactly the configured mandatory checks.')
         if criteria['configuration']['maximum_price'] is None and payload.total_price is not None:
             raise HTTPException(422, 'No mandatory price limit is configured.')
         determinations = payload.model_dump(mode='json', include={'checks','total_price','currency'})
+        from evidence import metadata,COLUMNS
+        files=connection.execute(f'SELECT {COLUMNS} FROM supplier_evidence WHERE project_id=%s AND supplier_id=%s AND archived_at IS NULL ORDER BY created_at,id',(project_id,supplier_id)).fetchall()
+        if files:determinations['evidence_files']=[metadata(f) for f in files]
         review = connection.execute('SELECT * FROM supplier_reviews WHERE supplier_id=%s FOR UPDATE', (supplier_id,)).fetchone()
-        if review and review['criteria_revision'] == payload.criteria_revision and review['supplier_updated_at'] == supplier['updated_at'] and review['determinations'] == determinations:
+        if review and review['criteria_revision'] == payload.criteria_revision and review['supplier_updated_at'] == supplier['updated_at'] and review.get('evidence_revision',0) == supplier.get('evidence_revision',0) and review['determinations'] == determinations:
             return eligibility_supplier(supplier, review, criteria)
         if payload.expected_revision != (review['revision'] if review else 0):
             raise HTTPException(409, 'Review changed in another window. Reload before saving. Your entries are kept.')
-        review = connection.execute('''INSERT INTO supplier_reviews(supplier_id,determinations,criteria_revision,supplier_updated_at,revision)
-            VALUES (%s,%s,%s,%s,1) ON CONFLICT(supplier_id) DO UPDATE SET determinations=EXCLUDED.determinations,
-            criteria_revision=EXCLUDED.criteria_revision,supplier_updated_at=EXCLUDED.supplier_updated_at,
+        review = connection.execute('''INSERT INTO supplier_reviews(supplier_id,determinations,criteria_revision,supplier_updated_at,evidence_revision,revision)
+            VALUES (%s,%s,%s,%s,%s,1) ON CONFLICT(supplier_id) DO UPDATE SET determinations=EXCLUDED.determinations,
+            criteria_revision=EXCLUDED.criteria_revision,supplier_updated_at=EXCLUDED.supplier_updated_at,evidence_revision=EXCLUDED.evidence_revision,
             revision=supplier_reviews.revision+1,updated_at=clock_timestamp() RETURNING *''',
-            (supplier_id,Jsonb(determinations),payload.criteria_revision,supplier['updated_at'])).fetchone()
+            (supplier_id,Jsonb(determinations),payload.criteria_revision,supplier['updated_at'],payload.evidence_revision)).fetchone()
         touch_project(connection, project_id)
     return eligibility_supplier(supplier, review, criteria)
 
@@ -738,6 +744,10 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
         snapshot['weight_method'] = {'ahp':'AHP pairwise weighting (approved)','ai':'AI-assisted weighting (approved)','manual':'Manual percentage weighting (approved)'}[active_weights['method']]
         snapshot['weight_provenance'] = active_weights['provenance']
         snapshot['eligibility'] = {'configuration': criteria['configuration'], 'suppliers': eligible}
+        from evidence import metadata,COLUMNS
+        evidence_rows=connection.execute(f'SELECT {COLUMNS} FROM supplier_evidence WHERE project_id=%s AND archived_at IS NULL ORDER BY created_at,id',(project_id,)).fetchall()
+        eligible_ids={s['id'] for s in eligible}
+        snapshot['evidence_files']=[metadata(f) for f in evidence_rows if str(f['supplier_id']) in eligible_ids]
         row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor)
             VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
             (payload.id, project_id, payload.ranking_id, payload.expected_version + 1, Jsonb(request), Jsonb(snapshot), 'Demo User (unauthenticated)')).fetchone()
@@ -1007,3 +1017,96 @@ def get_ai_history(project_id:UUID):
         require_project(connection,project_id)
         rows=connection.execute('SELECT revision,snapshot,created_at FROM project_ai_versions WHERE project_id=%s ORDER BY revision DESC LIMIT 20',(project_id,)).fetchall()
         return {'versions':[{'revision':r['revision'],'snapshot':r['snapshot'],'created_at':r['created_at'].isoformat()} for r in rows]}
+
+
+def evidence_owner(connection,project_id,supplier_id):
+    require_project(connection,project_id)
+    supplier=connection.execute('SELECT * FROM project_suppliers WHERE id=%s AND project_id=%s',(supplier_id,project_id)).fetchone()
+    if not supplier:raise HTTPException(404,'Supplier not found in this project.')
+    criteria=connection.execute('SELECT * FROM project_criteria WHERE project_id=%s',(project_id,)).fetchone()
+    return supplier,criteria
+
+
+def evidence_limits(connection,project_id):
+    import evidence
+    usage=connection.execute('SELECT COALESCE(sum(size_bytes),0) AS used,count(*) AS total FROM supplier_evidence WHERE project_id=%s',(project_id,)).fetchone()
+    return {'used_bytes':usage['used'],'max_bytes':evidence.MAX_PROJECT_BYTES,'file_max_bytes':evidence.MAX_FILE_BYTES,
+            'active_limit':evidence.MAX_ACTIVE_FILES,'stored_files':usage['total'],'stored_file_limit':evidence.MAX_PROJECT_FILES}
+
+
+@app.get('/api/projects/{project_id}/suppliers/{supplier_id}/evidence')
+def list_evidence(project_id:UUID,supplier_id:UUID):
+    from evidence import COLUMNS,metadata
+    with database.connect() as connection:
+        supplier,criteria=evidence_owner(connection,project_id,supplier_id)
+        rows=connection.execute(f'SELECT {COLUMNS} FROM supplier_evidence WHERE project_id=%s AND supplier_id=%s AND archived_at IS NULL ORDER BY created_at,id',(project_id,supplier_id)).fetchall()
+        return {'files':[metadata(r) for r in rows],'evidence_revision':supplier['evidence_revision'],'limits':evidence_limits(connection,project_id)}
+
+
+def store_evidence(project_id,supplier_id,document_id,filename,criteria_revision,supplier_updated_at,evidence_revision,check_id,content):
+    import evidence
+    try:filename,mime,digest=evidence.validate_file(filename,content)
+    except ValueError as error:raise HTTPException(422,str(error)) from None
+    with database.connect() as connection:
+        supplier,criteria=evidence_owner(connection,project_id,supplier_id)
+        old=connection.execute(f'SELECT {evidence.COLUMNS} FROM supplier_evidence WHERE id=%s',(document_id,)).fetchone()
+        if old:
+            if old['project_id']!=project_id or old['supplier_id']!=supplier_id or old['filename']!=filename or old['sha256']!=digest or old['check_id']!=check_id or old['criteria_revision']!=criteria_revision or old['archived_at']:
+                raise HTTPException(409,'This upload identifier was already used. Choose the file again to start a new upload.')
+            return {'file':evidence.metadata(old),'evidence_revision':supplier['evidence_revision']}
+        if not criteria or criteria['revision']!=criteria_revision or supplier['updated_at']!=supplier_updated_at or supplier['evidence_revision']!=evidence_revision:
+            raise HTTPException(409,'Supplier, criteria or files changed. Cancel and refresh the review before uploading.')
+        checks={c['id']:c for c in criteria['configuration']['mandatory_checks']}
+        if check_id is not None and check_id not in checks:raise HTTPException(422,'Choose a current mandatory requirement or General supplier evidence.')
+        usage=evidence_limits(connection,project_id)
+        active=connection.execute('SELECT count(*) AS total FROM supplier_evidence WHERE project_id=%s AND supplier_id=%s AND archived_at IS NULL',(project_id,supplier_id)).fetchone()['total']
+        if active>=evidence.MAX_ACTIVE_FILES or usage['used_bytes']+len(content)>evidence.MAX_PROJECT_BYTES or usage['stored_files']>=evidence.MAX_PROJECT_FILES:
+            raise HTTPException(422,'Evidence storage limit reached: 10 active files per supplier, 20 MiB and 100 retained files per project. Archived files count toward retained storage.')
+        row=connection.execute(f'''INSERT INTO supplier_evidence(id,project_id,supplier_id,supplier_name,filename,mime_type,size_bytes,sha256,content,check_id,check_name,criteria_revision)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING {evidence.COLUMNS}''',
+            (document_id,project_id,supplier_id,supplier['name'],filename,mime,len(content),digest,content,check_id,checks[check_id]['name'] if check_id else None,criteria_revision)).fetchone()
+        connection.execute('UPDATE project_suppliers SET evidence_revision=evidence_revision+1 WHERE id=%s',(supplier_id,))
+        touch_project(connection,project_id)
+        return {'file':evidence.metadata(row),'evidence_revision':supplier['evidence_revision']+1}
+
+
+@app.put('/api/projects/{project_id}/suppliers/{supplier_id}/evidence/{document_id}')
+async def upload_evidence(project_id:UUID,supplier_id:UUID,document_id:UUID,request:Request,
+                          filename:str=Query(min_length=1,max_length=180),criteria_revision:int=Query(gt=0),
+                          supplier_updated_at:datetime=Query(),evidence_revision:int=Query(ge=0),check_id:str|None=Query(default=None,max_length=64)):
+    from evidence import MAX_FILE_BYTES
+    from starlette.concurrency import run_in_threadpool
+    length=request.headers.get('content-length','')
+    if length.isdigit() and int(length)>MAX_FILE_BYTES:raise HTTPException(413,'Each document must be 2 MiB or smaller.')
+    content=bytearray()
+    async for chunk in request.stream():
+        if len(content)+len(chunk)>MAX_FILE_BYTES:raise HTTPException(413,'Each document must be 2 MiB or smaller.')
+        content.extend(chunk)
+    return await run_in_threadpool(store_evidence,project_id,supplier_id,document_id,filename,criteria_revision,supplier_updated_at,evidence_revision,check_id,bytes(content))
+
+
+@app.delete('/api/projects/{project_id}/suppliers/{supplier_id}/evidence/{document_id}')
+def archive_evidence(project_id:UUID,supplier_id:UUID,document_id:UUID,evidence_revision:int=Query(ge=0)):
+    with database.connect() as connection:
+        supplier,_=evidence_owner(connection,project_id,supplier_id)
+        row=connection.execute('SELECT id,archived_at FROM supplier_evidence WHERE id=%s AND project_id=%s AND supplier_id=%s',(document_id,project_id,supplier_id)).fetchone()
+        if not row:raise HTTPException(404,'Evidence document not found in this project and supplier.')
+        if row['archived_at']:return {'evidence_revision':supplier['evidence_revision']}
+        if supplier['evidence_revision']!=evidence_revision:raise HTTPException(409,'Evidence files changed in another window. Cancel and refresh the review before removing a file.')
+        connection.execute('UPDATE supplier_evidence SET archived_at=clock_timestamp() WHERE id=%s',(document_id,))
+        connection.execute('UPDATE project_suppliers SET evidence_revision=evidence_revision+1 WHERE id=%s',(supplier_id,))
+        touch_project(connection,project_id)
+        return {'evidence_revision':supplier['evidence_revision']+1}
+
+
+@app.get('/api/projects/{project_id}/suppliers/{supplier_id}/evidence/{document_id}/content')
+def download_evidence(project_id:UUID,supplier_id:UUID,document_id:UUID):
+    from urllib.parse import quote
+    with database.connect() as connection:
+        # Archived documents remain available to historical reports, even after supplier removal.
+        row=connection.execute('SELECT filename,mime_type,content FROM supplier_evidence WHERE id=%s AND project_id=%s AND supplier_id=%s',(document_id,project_id,supplier_id)).fetchone()
+        if not row:raise HTTPException(404,'Evidence document not found in this project and supplier.')
+    extension='.pdf' if row['mime_type']=='application/pdf' else '.txt'
+    return Response(bytes(row['content']),media_type=row['mime_type'],headers={
+        'Content-Disposition':f"attachment; filename=\"SDSS-evidence-{document_id}{extension}\"; filename*=UTF-8''{quote(row['filename'],safe='')}",
+        'X-Content-Type-Options':'nosniff','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; sandbox"})
