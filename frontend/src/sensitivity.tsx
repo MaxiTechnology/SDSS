@@ -1,0 +1,16 @@
+import {useEffect,useState} from 'react';
+import {api} from './api';
+import type {Run} from './rankings';
+type Scenario={baseline_id:string;weights:Record<string,string>;result:Run['snapshot']['result']};
+export function Sensitivity({projectId}:{projectId:string}){
+ const [base,setBase]=useState<Run|null>(null),[weights,setWeights]=useState<Record<string,string>>({}),[result,setResult]=useState<Scenario|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{api<Run>(`/api/projects/${projectId}/rankings`).then(r=>{setBase(r);setWeights({...r.snapshot.weights});}).catch(e=>setError(e.message));},[projectId]);
+ const total=Object.values(weights).reduce((a,v)=>a+Math.round(Number(v)*100),0);
+ const valid=base&&base.snapshot.criteria.every(c=>/^\d+(\.\d{1,2})?$/.test(weights[c.id]??'')&&Number(weights[c.id])<=100)&&total===10000;
+ async function simulate(){if(!base)return;setBusy(true);setError('');setResult(null);try{setResult(await api<Scenario>(`/api/projects/${projectId}/sensitivity`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({baseline_id:base.id,weights})}));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ const winners=(rows:Run['snapshot']['result']['rows'])=>rows.filter(r=>r.rank===1).map(r=>r.id).sort().join(',');
+ return <section className="supplier-page"><h2>Sensitivity Analysis</h2><p className="info">Try alternative weights using the saved ranking inputs. Approved weights and original rankings stay saved. Scenarios are temporary and reset when you leave or refresh.</p>{error&&<p className="error" role="alert">{error}</p>}{base&&(base.stale?<p className="error" role="alert">The baseline is out of date. Return to the matrix and calculate rankings again.</p>:<>
+ <h3>Criteria Weight Adjustment</h3><fieldset disabled={busy}>{base.snapshot.criteria.map(c=><label key={c.id} style={{display:'block',marginBottom:16}}>{c.name} (base {base.snapshot.weights[c.id]}%)<input aria-label={`${c.name} scenario weight`} type="number" min="0" max="100" step="0.01" value={weights[c.id]??''} onChange={e=>{setWeights({...weights,[c.id]:e.target.value});setResult(null);}} /></label>)}<p role="status">Total Weight: {(total/100).toFixed(2)}% — must equal 100%.</p><button className="secondary" onClick={()=>{setWeights({...base.snapshot.weights});setResult(null);setError('');}}>Reset to Baseline</button><button className="primary" disabled={!valid||busy} onClick={()=>void simulate()}>{busy?'Calculating…':'Run Simulation'}</button></fieldset>
+ {result&&<><h3>Recommendation Comparison</h3><p className="success">{winners(base.snapshot.result.rows)===winners(result.result.rows)?'Highest-ranked supplier set unchanged.':'Highest-ranked supplier set changed.'} Final approval is still required.</p><table><thead><tr><th>Supplier</th><th>Original rank</th><th>Scenario rank</th><th>Original score</th><th>Scenario score</th></tr></thead><tbody>{result.result.rows.map(r=>{const old=base.snapshot.result.rows.find(v=>v.id===r.id)!;return <tr key={r.id}><td>{r.name}</td><td>{old.rank}</td><td>{r.rank}</td><td>{Number(old.score).toFixed(6)}</td><td>{Number(r.score).toFixed(6)}</td></tr>;})}</tbody></table></>}
+ </>)}<button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/rankings`}>← Back to Rankings</button></section>;
+}

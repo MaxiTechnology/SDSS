@@ -606,3 +606,35 @@ def get_ranking(project_id: UUID):
         except HTTPException:
             context,revision = '',0
         return ranking_json(row,context,revision)
+
+
+class SensitivityRequest(BaseModel):
+    baseline_id: UUID
+    weights: dict[str, Decimal] = Field(min_length=2, max_length=20)
+
+    @field_validator('weights')
+    @classmethod
+    def valid_weights(cls, values):
+        ManualWeightsSave.valid_weights(values)
+        if sum(values.values()) != Decimal('100'):
+            raise ValueError('Scenario weights must total exactly 100%.')
+        return values
+
+
+@app.post('/api/projects/{project_id}/sensitivity')
+def simulate_sensitivity(project_id: UUID, payload: SensitivityRequest):
+    from topsis import calculate
+    with database.connect() as connection:
+        _,_,_,context = matrix_context(connection,project_id)
+        matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
+        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC LIMIT 1',(project_id,)).fetchone()
+        if not row or row['id'] != payload.baseline_id or not matrix or ranking_json(row,context,matrix['revision'])['stale']:
+            raise HTTPException(409,'The baseline changed. Calculate current rankings before running a scenario.')
+        snapshot = row['snapshot']
+        if set(payload.weights) != {c['id'] for c in snapshot['criteria']}:
+            raise HTTPException(422,'Use exactly the baseline scoring criteria.')
+        try:
+            result = calculate(snapshot['entries'],snapshot['suppliers'],snapshot['criteria'],payload.weights)
+        except ValueError as error:
+            raise HTTPException(422,str(error)) from None
+        return {'baseline_id':str(row['id']), 'weights':{k:str(v) for k,v in payload.weights.items()}, 'result':result}

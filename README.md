@@ -15,7 +15,7 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-AI/AHP weighting, sensitivity, final decisions and reports remain future tickets. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
+AI/AHP weighting, final decisions and reports remain future tickets. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
 
 Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Approved weights unlock supplier eligibility review.
 
@@ -92,3 +92,10 @@ Calculate Rankings uses only a complete, current saved matrix and approved weigh
 Policy: calculations use 50-digit Decimal arithmetic. Sort by unrounded scores; show six decimal places. Exact calculated ties share a competition rank (1, 1, 3), with supplier ID used only for stable display order. A tied highest score has no single recommendation. All-zero columns and completely indistinguishable weighted datasets block calculation with a review message; constant nonzero columns contribute zero distance. No prototype scores are hardcoded.
 
 Each run stores its input matrix, eligible supplier names/IDs, criteria, approved weights, currency and calculation details in an append-only application snapshot. Identical retries reuse a run. Changed inputs mark the previous snapshot stale; it remains readable and must be recalculated before use. This is a demonstration history, not a secured audit ledger: authentication, role permissions and final decision approval remain future work. Sensitivity and final decisions are not yet available. Migration 7 adds ranking storage. Tests cover a worked symmetric example, preference reversal, ties, zero/degenerate cases, unit scaling, cloud persistence, retry identity, stale snapshots and browser failure recovery.
+
+
+## Sensitivity analysis
+
+Open Run Sensitivity Analysis from current rankings. Trial weights use the saved baseline matrix, criterion preferences and eligible supplier pool. Weights must total exactly 100%, each between 0 and 100 with at most two decimal places. Run Simulation compares original and scenario ranks and scores, including tied highest-ranked sets. Reset restores baseline weights. Editing weights clears the previous trial result.
+
+Simulations do not write approved weights, ranking runs, supplier data or decisions. Scenarios are temporary and reset on navigation or refresh; saving scenario drafts is not implemented yet. The API rejects outdated or replaced baselines under the project lock, uses the same TOPSIS engine, and rejects degenerate scenarios. Tests verify validation, rank reversal, unchanged approved data, stale baseline rejection, browser retry and reset. Authentication and final approval remain separate unfinished features.
