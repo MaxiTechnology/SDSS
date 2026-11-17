@@ -1,3 +1,4 @@
+import { Rankings } from './rankings';
 import { EvaluationMatrix } from './matrix';
 import { Eligibility } from './eligibility';
 import { ManualWeighting } from './weighting';
@@ -58,8 +59,9 @@ function App() {
   const criteriaView = detail && route.endsWith("/criteria");
   const weightingView = detail && route.endsWith("/weights/manual");
   const eligibilityView = detail && route.endsWith("/eligibility");
+  const rankingsView = detail && route.endsWith("/rankings");
   const matrixView = detail && route.endsWith("/matrix");
-  const stage = matrixView || eligibilityView ? 3 : criteriaView || weightingView ? 2 : supplierView ? 1 : 0;
+  const stage = rankingsView || matrixView || eligibilityView ? 3 : criteriaView || weightingView ? 2 : supplierView ? 1 : 0;
   function go(path: string) {
     location.hash = path;
   }
@@ -209,12 +211,12 @@ function App() {
               </button>
               <h1>
                 {detail
-                  ? matrixView ? "Supplier Evaluation Matrix" : eligibilityView ? "Supplier Eligibility Review" : weightingView ? "Manual Weighting" : criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
+                  ? rankingsView ? "Supplier Rankings" : matrixView ? "Supplier Evaluation Matrix" : eligibilityView ? "Supplier Eligibility Review" : weightingView ? "Manual Weighting" : criteriaView ? "Evaluation Criteria" : supplierView ? "Add Suppliers" : "Purchasing Project Details"
                   : "Create Purchasing Project"}
               </h1>
               <p className="subtitle">
                 {detail
-                  ? matrixView ? "Enter supplier values for comparison." : eligibilityView ? "Review mandatory supplier requirements." : weightingView ? "Assign and approve criterion importance." : criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
+                  ? rankingsView ? "Review calculated supplier scores." : matrixView ? "Enter supplier values for comparison." : eligibilityView ? "Review mandatory supplier requirements." : weightingView ? "Assign and approve criterion importance." : criteriaView ? "Configure scoring criteria and mandatory requirements." : supplierView ? "Add the suppliers you want to compare for this project." : "Review your project details or continue to supplier setup."
                   : "Set up the basic details for your purchasing project to get started."}
               </p>
               <div className="stepper">
@@ -262,6 +264,8 @@ function App() {
           )}
           {loading ? (
             <p role="status">Loading projects…</p>
+          ) : rankingsView && project ? (
+            <Rankings key={project.id} projectId={project.id} />
           ) : matrixView && project ? (
             <EvaluationMatrix key={project.id} projectId={project.id} />
           ) : eligibilityView && project ? (

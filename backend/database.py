@@ -112,6 +112,19 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (6)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 7").fetchone():
+            connection.execute("""
+                CREATE TABLE ranking_runs (
+                    id uuid PRIMARY KEY,
+                    project_id uuid NOT NULL REFERENCES purchasing_projects(id),
+                    context text NOT NULL,
+                    matrix_revision integer NOT NULL,
+                    snapshot jsonb NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    UNIQUE(project_id,context,matrix_revision)
+                );
+                INSERT INTO sdss_migrations(version) VALUES (7)
+            """)
 
 if __name__ == "__main__":
     try:

@@ -555,3 +555,54 @@ def save_matrix(project_id: UUID, payload: MatrixSave):
             revision=project_matrix.revision+1,updated_at=clock_timestamp() RETURNING *""",(project_id,Jsonb(entries),context)).fetchone()
         touch_project(connection,project_id)
         return matrix_json(row,criteria,suppliers,selected,context)
+
+class RankingRequest(BaseModel):
+    context: str = Field(min_length=64, max_length=64)
+    matrix_revision: int = Field(gt=0)
+
+
+def ranking_json(row, context, revision):
+    return {'id':str(row['id']), 'created_at':row['created_at'].isoformat(),
+            'stale':row['context'] != context or row['matrix_revision'] != revision,
+            'snapshot':row['snapshot']}
+
+
+@app.post('/api/projects/{project_id}/rankings')
+def create_ranking(project_id: UUID, payload: RankingRequest):
+    from uuid import uuid4
+    from psycopg.types.json import Jsonb
+    from topsis import calculate
+    with database.connect() as connection:
+        criteria,suppliers,selected,context = matrix_context(connection,project_id)
+        matrix = connection.execute('SELECT * FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
+        if not matrix or matrix['context'] != context or payload.context != context or payload.matrix_revision != matrix['revision']:
+            raise HTTPException(409,'Matrix or project inputs changed. Reload and save the matrix before calculating.')
+        if not matrix_json(matrix,criteria,suppliers,selected,context)['ready']:
+            raise HTTPException(422,'Complete and save every matrix value before calculating.')
+        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s AND context=%s AND matrix_revision=%s',(project_id,context,matrix['revision'])).fetchone()
+        if not row:
+            weights = connection.execute('SELECT weights FROM project_weights WHERE project_id=%s',(project_id,)).fetchone()['weights']
+            try: result = calculate(matrix['entries'],[{'id':s['id'],'name':s['name']} for s in suppliers],selected,weights)
+            except ValueError as error: raise HTTPException(422,str(error)) from None
+            snapshot = {'method':'TOPSIS vector normalization v1', 'entries':matrix['entries'], 'suppliers':[{'id':s['id'],'name':s['name']} for s in suppliers],
+                        'criteria':selected,'weights':weights,'currency':criteria['currency'],'result':result}
+            row = connection.execute('INSERT INTO ranking_runs(id,project_id,context,matrix_revision,snapshot) VALUES (%s,%s,%s,%s,%s) RETURNING *',
+                (uuid4(),project_id,context,matrix['revision'],Jsonb(snapshot))).fetchone()
+        return ranking_json(row,context,matrix['revision'])
+
+
+@app.get('/api/projects/{project_id}/rankings')
+def get_ranking(project_id: UUID):
+    with database.connect() as connection:
+        # Preserve access to historical snapshots even when the current pool is no longer ready.
+        project = connection.execute('SELECT id FROM purchasing_projects WHERE id=%s FOR UPDATE',(project_id,)).fetchone()
+        if not project: raise HTTPException(404,'Project not found.')
+        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC LIMIT 1',(project_id,)).fetchone()
+        if not row: raise HTTPException(404,'No rankings yet. Complete the matrix and calculate rankings.')
+        try:
+            _,_,_,context = matrix_context(connection,project_id)
+            matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
+            revision = matrix['revision'] if matrix else 0
+        except HTTPException:
+            context,revision = '',0
+        return ranking_json(row,context,revision)

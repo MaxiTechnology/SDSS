@@ -15,7 +15,7 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-AI/AHP weighting, TOPSIS, sensitivity, final decisions and reports remain future tickets. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
+AI/AHP weighting, sensitivity, final decisions and reports remain future tickets. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
 
 Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Approved weights unlock supplier eligibility review.
 
@@ -83,4 +83,12 @@ Supplier screens follow the existing application layout and supplied screenshots
 
 Eligibility verification covers cancellation, required review notes, failed-save recovery and reopening after refresh. Isolated database checks cover approval gating, pass/fail/pending derivation, exact price limits, safe retries, revision conflicts, project isolation and review invalidation.
 
-Evaluation matrix entry supports eligible suppliers and selected scoring criteria, units, configured ranges, saved incomplete drafts, failed-save recovery and revision conflicts. Changed eligibility, suppliers, criteria, currency or weights require matrix review. Complete entries show readiness; TOPSIS calculation is not implemented yet. Browser checks cover invalid ranges, save failures and reopening; isolated database checks cover drafts, persistence, safe retries, stale context and project isolation.
+Evaluation matrix entry supports eligible suppliers and selected scoring criteria, units, configured ranges, saved incomplete drafts, failed-save recovery and revision conflicts. Changed eligibility, suppliers, criteria, currency or weights require matrix review. Complete entries unlock TOPSIS calculation. Browser checks cover invalid ranges, save failures and reopening; isolated database checks cover drafts, persistence, safe retries, stale context and project isolation.
+
+## TOPSIS rankings
+
+Calculate Rankings uses only a complete, current saved matrix and approved weights. Each column is divided by its Euclidean norm, multiplied by its approved percentage weight, then compared with cost/benefit ideal best and worst values. Scores are distance-to-worst / (distance-to-best + distance-to-worst). The algorithm follows the vector-normalized TOPSIS sequence described in https://doi.org/10.1016/J.DAJOUR.2021.100021 .
+
+Policy: calculations use 50-digit Decimal arithmetic. Sort by unrounded scores; show six decimal places. Exact calculated ties share a competition rank (1, 1, 3), with supplier ID used only for stable display order. A tied highest score has no single recommendation. All-zero columns and completely indistinguishable weighted datasets block calculation with a review message; constant nonzero columns contribute zero distance. No prototype scores are hardcoded.
+
+Each run stores its input matrix, eligible supplier names/IDs, criteria, approved weights, currency and calculation details in an append-only application snapshot. Identical retries reuse a run. Changed inputs mark the previous snapshot stale; it remains readable and must be recalculated before use. This is a demonstration history, not a secured audit ledger: authentication, role permissions and final decision approval remain future work. Sensitivity and final decisions are not yet available. Migration 7 adds ranking storage. Tests cover a worked symmetric example, preference reversal, ties, zero/degenerate cases, unit scaling, cloud persistence, retry identity, stale snapshots and browser failure recovery.

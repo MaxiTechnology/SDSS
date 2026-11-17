@@ -38,13 +38,27 @@ def test_matrix_persistence_and_conflicts(monkeypatch):
         result=client.put(base+'/matrix',json=data);assert result.status_code==200,result.text
         assert result.json()['ready'] and client.get(base+'/matrix').json()['ready']
         assert client.put(base+'/matrix',json=data).json()['revision']==2
+        ranking_payload={'context':initial['context'],'matrix_revision':2}
+        # Identical suppliers cannot yield a meaningful ranking.
+        assert client.post(base+'/rankings',json=ranking_payload).status_code==422
+        changed={**data,'expected_revision':2,'entries':{sid:dict(values) for sid,values in data['entries'].items()}}
+        changed['entries'][suppliers[0]['id']]['quality']='95'
+        assert client.put(base+'/matrix',json=changed).status_code==200
+        ranking_payload['matrix_revision']=3
+        run=client.post(base+'/rankings',json=ranking_payload)
+        assert run.status_code==200,run.text
+        assert client.post(base+'/rankings',json=ranking_payload).json()['id']==run.json()['id']
+        assert not client.get(base+'/rankings').json()['stale']
+        assert client.get('/api/projects/'+str(uuid4())+'/rankings').status_code==404
         data['entries'][suppliers[0]['id']]['quality']='91'
         assert client.put(base+'/matrix',json=data).status_code==409
-        data['expected_revision']=2;data['entries'][suppliers[0]['id']]['quality']='101'
+        data['expected_revision']=3;data['entries'][suppliers[0]['id']]['quality']='101'
         assert client.put(base+'/matrix',json=data).status_code==422
         assert client.get('/api/projects/'+str(uuid4())+'/matrix').status_code==404
         s=suppliers[0];client.put(base+'/suppliers/'+s['id'],json={'name':'A edited','location':'','description':'','expected_updated_at':s['updated_at']})
         assert client.put(base+'/matrix',json=data).status_code==409
         assert client.get(base+'/matrix').json()['needs_review']
+        assert client.get(base+'/rankings').json()['stale']
+        assert client.get(base+'/rankings').json()['snapshot']==run.json()['snapshot']
     finally:
         with original() as conn: conn.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))
