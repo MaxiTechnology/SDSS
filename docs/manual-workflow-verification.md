@@ -50,3 +50,12 @@ The read-only cloud projection identified the user project as Approved and count
 ## Evidence upload verification - 2026-11-18
 
 Default backend checks: 56 passed, eight opt-in cloud skips. Browser suite: 15 passed. Evidence checks cover supported formats, size/page limits, exact file hashes, retry identity, stale review versions, download/removal and preserved historical attachment metadata. The isolated cloud journey checks retained downloads after archival and supplier deletion, review invalidation and storage quotas. The user completed upload, reopened the saved supplier review, downloaded and opened the text file, recalculated the evaluation, confirmed decision version 4, and verified attachment metadata in both the saved web report and page 3 of its downloaded PDF (screenshots 752–759). Authenticated document access remains outside this demonstration.
+
+
+## Dashboard user acceptance - 2026-11-18
+
+Screenshot 760 showed one project, one approved decision, three supplier entries and zero projects needing review. The user confirmed Saved Report opened decision version 4 and Continue Workflow opened the approved decision. Screenshot 761 showed the Laptop search result with Approved status and three suppliers. The user then confirmed Approved / Needs review filtering and Clear filters restored the project. Dashboard and project-list navigation/search/filter acceptance is complete for this single-project demonstration; pagination remains covered by automated tests.
+
+## Matrix review follow-up
+
+Saving a supplier review changes the review revision included in matrix context. A context mismatch currently presents an empty matrix and requires explicit resubmission before recalculation, even when the project has no mandatory checks. Prior saved decisions remain intact. Automatically reusing old numbers is not implemented: changes to units, currency or selected criteria must not silently reinterpret old inputs. This usability limitation was observed during the evidence walkthrough and remains a follow-up.
