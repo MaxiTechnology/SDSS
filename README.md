@@ -21,7 +21,7 @@ Manual weighting supports saved drafts, two-decimal percentage inputs, equal dis
 
 Supplier eligibility review saves Passed/Pending/Failed determinations and required notes for passed or failed mandatory checks. A configured maximum total price is checked automatically; equality is allowed, and missing price stays Pending. Only fully eligible suppliers count toward the minimum pool of two. With no mandatory requirements or price limit, suppliers qualify without checks. Criteria, supplier or currency changes require affected reviews to be repeated. Saves reject stale edits and support safe retries.
 
-Review decisions are attributed to Demo User (unauthenticated), with a saved timestamp. Document uploads, authenticated reviewers, immutable audit history and evaluation matrix entry are still pending; SDSS-011 is not fully complete. These demonstration reviews must use synthetic data.
+Review decisions are attributed to Demo User (unauthenticated), with a saved timestamp. Document uploads, authenticated reviewers, and immutable audit history are still pending; SDSS-011 is not fully complete. These demonstration reviews must use synthetic data.
 
 ## Set up on another computer
 
@@ -29,7 +29,7 @@ Review decisions are attributed to Demo User (unauthenticated), with a saved tim
 2. Run `npm ci` inside `frontend`.
 3. Inside `backend`, run `python -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt`.
 4. Double-click `Connect cloud database.cmd` and enter your Neon connection strings privately. Alternatively set the backend `DATABASE_URL` environment variable. Never put credentials in frontend settings.
-5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier, criteria, manual-weight and eligibility-review storage migrations. It is safe to run again.
+5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier, criteria, manual-weight eligibility-review and evaluation-matrix storage migrations. It is safe to run again.
 
 Database setup utilities only verify and save the connection. The separate migration command creates application tables. Existing data is preserved.
 
@@ -82,3 +82,5 @@ Trello tracks implementation tickets. Figma is the design reference. The impleme
 Supplier screens follow the existing application layout and supplied screenshots. Exact Figma visual verification remains pending because design-file access was unavailable. SDSS-006 is implemented for supplier records; downstream result invalidation depends on the later calculation tickets.
 
 Eligibility verification covers cancellation, required review notes, failed-save recovery and reopening after refresh. Isolated database checks cover approval gating, pass/fail/pending derivation, exact price limits, safe retries, revision conflicts, project isolation and review invalidation.
+
+Evaluation matrix entry supports eligible suppliers and selected scoring criteria, units, configured ranges, saved incomplete drafts, failed-save recovery and revision conflicts. Changed eligibility, suppliers, criteria, currency or weights require matrix review. Complete entries show readiness; TOPSIS calculation is not implemented yet. Browser checks cover invalid ranges, save failures and reopening; isolated database checks cover drafts, persistence, safe retries, stale context and project isolation.

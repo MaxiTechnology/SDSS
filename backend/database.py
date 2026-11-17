@@ -100,6 +100,18 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (5)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 6").fetchone():
+            connection.execute("""
+                CREATE TABLE project_matrix (
+                    project_id uuid PRIMARY KEY REFERENCES purchasing_projects(id) ON DELETE CASCADE,
+                    entries jsonb NOT NULL,
+                    context text NOT NULL,
+                    revision integer NOT NULL CHECK (revision > 0),
+                    updated_at timestamptz NOT NULL DEFAULT now()
+                );
+                INSERT INTO sdss_migrations(version) VALUES (6)
+            """)
+
 
 if __name__ == "__main__":
     try:

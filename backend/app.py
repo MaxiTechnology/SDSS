@@ -474,3 +474,84 @@ def save_manual_weights(project_id: UUID, payload: ManualWeightsSave):
             (project_id,Jsonb(values),payload.criteria_revision,payload.approved)).fetchone()
         touch_project(connection, project_id)
     return weights_json(row, criteria)
+
+
+class MatrixSave(BaseModel):
+    entries: dict[str, dict[str, Decimal | None]] = Field(max_length=1000)
+    context: str = Field(min_length=64, max_length=64)
+    expected_revision: int = Field(ge=0)
+
+
+def matrix_context(connection, project_id):
+    import hashlib
+    import json
+    criteria = eligibility_context(connection, project_id)
+    suppliers = connection.execute('SELECT * FROM project_suppliers WHERE project_id=%s ORDER BY created_at,id', (project_id,)).fetchall()
+    reviews = {r['supplier_id']:r for r in connection.execute('SELECT r.* FROM supplier_reviews r JOIN project_suppliers s ON s.id=r.supplier_id WHERE s.project_id=%s', (project_id,)).fetchall()}
+    eligible = [eligibility_supplier(s, reviews.get(s['id']), criteria) for s in suppliers]
+    eligible = [s for s in eligible if s['eligibility'] == 'eligible']
+    if len(eligible) < 2:
+        raise HTTPException(422, 'At least two eligible suppliers are required for the evaluation matrix.')
+    weights = connection.execute('SELECT * FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
+    token = hashlib.sha256(json.dumps([criteria['revision'],criteria['currency'],weights['revision'],[(s['id'],s['updated_at'],s['revision']) for s in eligible]],default=str).encode()).hexdigest()
+    selected = [c for c in criteria['configuration']['criteria'] if c['selected']]
+    return criteria, eligible, selected, token
+
+
+def matrix_errors(entries, suppliers, criteria, maximum_price):
+    errors = {}
+    for supplier in suppliers:
+        sid = supplier['id']
+        for criterion in criteria:
+            cid = criterion['id']; value = entries.get(sid, {}).get(cid)
+            message = None
+            if value is None: message = 'Enter a value.'
+            else:
+                value = Decimal(str(value))
+                if not value.is_finite() or abs(value) > Decimal('99999999999999.99') or value.as_tuple().exponent < -4:
+                    message = 'Use a finite number with at most four decimal places.'
+                elif criterion.get('minimum') is not None and value < Decimal(str(criterion['minimum'])): message = 'Below the configured minimum.'
+                elif criterion.get('maximum') is not None and value > Decimal(str(criterion['maximum'])): message = 'Above the configured maximum.'
+                elif cid == 'price' and maximum_price is not None and (value > Decimal(str(maximum_price)) or value != Decimal(str(supplier['total_price']))):
+                    message = 'Price must match the total price in the eligibility review.'
+            if message: errors.setdefault(sid, {})[cid] = message
+    return errors
+
+
+def matrix_json(row, criteria, suppliers, selected, context):
+    current = bool(row and row['context'] == context)
+    entries = row['entries'] if current else {s['id']:{c['id']:None for c in selected} for s in suppliers}
+    errors = matrix_errors(entries,suppliers,selected,criteria['configuration']['maximum_price'])
+    return {'entries':entries,'suppliers':[{'id':s['id'],'name':s['name']} for s in suppliers], 'criteria':selected,
+            'context':context,'revision':row['revision'] if row else 0,'needs_review':bool(row and not current),
+            'errors':errors,'ready':not errors}
+
+
+@app.get('/api/projects/{project_id}/matrix')
+def get_matrix(project_id: UUID):
+    with database.connect() as connection:
+        criteria,suppliers,selected,context = matrix_context(connection,project_id)
+        row = connection.execute('SELECT * FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
+        return matrix_json(row,criteria,suppliers,selected,context)
+
+
+@app.put('/api/projects/{project_id}/matrix')
+def save_matrix(project_id: UUID, payload: MatrixSave):
+    from psycopg.types.json import Jsonb
+    with database.connect() as connection:
+        criteria,suppliers,selected,context = matrix_context(connection,project_id)
+        if context != payload.context: raise HTTPException(409,'Project inputs or eligibility changed. Reload the matrix before saving.')
+        if set(payload.entries) != {s['id'] for s in suppliers} or any(set(v) != {c['id'] for c in selected} for v in payload.entries.values()):
+            raise HTTPException(422,'Enter values only for current eligible suppliers and selected criteria.')
+        errors = matrix_errors(payload.entries,suppliers,selected,criteria['configuration']['maximum_price'])
+        if any(message != 'Enter a value.' for cells in errors.values() for message in cells.values()):
+            raise HTTPException(422,'Correct out-of-range values before saving. Missing values can be saved as a draft.')
+        entries = payload.model_dump(mode='json')['entries']
+        row = connection.execute('SELECT * FROM project_matrix WHERE project_id=%s FOR UPDATE',(project_id,)).fetchone()
+        if row and row['context'] == context and row['entries'] == entries: return matrix_json(row,criteria,suppliers,selected,context)
+        if payload.expected_revision != (row['revision'] if row else 0): raise HTTPException(409,'Matrix changed in another window. Reload before saving. Your entries are kept.')
+        row = connection.execute("""INSERT INTO project_matrix(project_id,entries,context,revision) VALUES (%s,%s,%s,1)
+            ON CONFLICT(project_id) DO UPDATE SET entries=EXCLUDED.entries,context=EXCLUDED.context,
+            revision=project_matrix.revision+1,updated_at=clock_timestamp() RETURNING *""",(project_id,Jsonb(entries),context)).fetchone()
+        touch_project(connection,project_id)
+        return matrix_json(row,criteria,suppliers,selected,context)

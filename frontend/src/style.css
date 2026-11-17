@@ -643,3 +643,5 @@ dialog::backdrop { background:#0006; }
 .eligibility-page .review-form {padding:24px;border:0;border-radius:0;box-shadow:none}
 .eligibility-page .review-check {padding:12px 0;border-bottom:1px solid #e5e9f4}
 .eligibility-page .review-check h3 {margin-top:0}
+
+.matrix-cell-error { display:block; color:#b42318; font-size:12px; margin-top:6px; }
