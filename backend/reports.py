@@ -71,9 +71,9 @@ def render_pdf(report):
     styles = getSampleStyleSheet()
     for name in ['Normal','BodyText','Title','Heading1','Heading2']:
         styles[name].fontName = 'SDSS'
-    styles['BodyText'].fontSize = 9; styles['BodyText'].leading = 14
+    styles['BodyText'].fontSize = 9; styles['BodyText'].leading = 12; styles['BodyText'].spaceBefore = 2
     styles['Title'].fontName = 'SDSSBold'; styles['Title'].fontSize = 22; styles['Title'].leading = 28; styles['Title'].alignment = TA_LEFT
-    styles['Heading2'].fontName = 'SDSSBold'; styles['Heading2'].fontSize = 12; styles['Heading2'].spaceBefore = 10
+    styles['Heading2'].fontName = 'SDSSBold'; styles['Heading2'].fontSize = 12; styles['Heading2'].spaceBefore = 8; styles['Heading2'].keepWithNext = True
     cellstyle = ParagraphStyle('cell', parent=styles['BodyText'], fontSize=8, leading=12, spaceAfter=0, splitLongWords=True)
     def p(value, style='BodyText'):
         return Paragraph(escape(str(value if value is not None else 'Not specified')).replace('\n', '<br/>'), styles[style])
@@ -94,7 +94,7 @@ def render_pdf(report):
     section('Criteria and approved weights',[report['method'], report['weight_method']])
     if report.get('weight_diagnostics'):
         d=report['weight_diagnostics']
-        section('AHP consistency', [f"CR: {d['cr']} | CI: {d['ci']} | RI: {d['ri']} | Lambda max: {d['lambda_max']}", d['method']])
+        section('AHP consistency', [f"CR: {Decimal(d['cr']):.6f} | CI: {Decimal(d['ci']):.6f} | RI: {Decimal(d['ri']):.2f} | Lambda max: {Decimal(d['lambda_max']):.6f}", d['method'], 'Diagnostics display rounded values; approval uses the unrounded consistency ratio.'])
     table(['Criterion','Unit','Preference','Weight (%)'],[[c['name'],c['unit'],'Lower is better' if c['direction']=='cost' else 'Higher is better',c['weight']] for c in report['criteria']],[185,90,140,90])
     section('Saved supplier input values',['Prices and other commercial values below reproduce the saved evaluation matrix. Units are those configured for this project.'])
     table(['Supplier','Criterion','Value','Unit'],[[v['supplier'],v['criterion'],v['value'],v['unit']] for v in report['values']],[155,175,80,95])

@@ -20,8 +20,8 @@ The API journey and browser page checks complement each other. There is no claim
 
 ## Remaining work
 
-- SDSS-009: AHP comparisons, diagnostics, persistence, approval and saved version history were added after the manual acceptance check. Separate tests verify the AHP path; user acceptance remains pending.
-- SDSS-010: AI suggestions; provider/model and approved context remain undecided. Manual fallback works.
+- SDSS-009: AHP comparisons, diagnostics, persistence, approval and saved version history were added after the manual acceptance check. Separate tests verify the AHP path. The user completed the 40/20/20/10/10 comparison example, approved it, recalculated rankings, confirmed decision version 2 and downloaded its AHP report. CR display and pagination were subsequently refined.
+- SDSS-010: AI suggestions are not implemented. Cloudflare Workers AI was recommended as the free provider; account setup, model confirmation and private credentials are still needed. Manual fallback works.
 - SDSS-011: evidence file upload/storage and access scope. Current pass/fail reviews use notes without attachments.
 - SDSS-014: sensitivity trials are temporary; reports truthfully identify the absence of saved findings.
 - SDSS-018: real dashboard metrics, workflow statuses and secondary lists. Project-list Draft labels do not yet derive from approval/deferral state.

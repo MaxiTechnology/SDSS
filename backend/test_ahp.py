@@ -48,4 +48,6 @@ def test_ahp_pdf_records_method_and_consistency():
     data=report_data(row)
     text='\n'.join(p.extract_text() for p in PdfReader(BytesIO(render_pdf(data))).pages)
     assert 'AHP consistency' in text and '66.67' in text and '33.33' in text
+    assert 'CR: 0.000000' in text and 'Lambda max: 2.000000' in text
+    assert '0E+' not in text
     assert data['weight_diagnostics']==r

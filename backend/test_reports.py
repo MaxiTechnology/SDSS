@@ -51,7 +51,8 @@ def test_long_reason_and_large_tables_paginate():
     for index in range(25):
         sid=str(index);ranking['suppliers'].append({'id':sid,'name':'Supplier '+sid});ranking['entries'][sid]={'price':'450000','quality':'80'}
     reader=PdfReader(BytesIO(render_pdf(report_data(row))))
-    assert len(reader.pages)>=4
+    assert len(reader.pages)>=3
+    assert 'Supplier 24' in '\n'.join(p.extract_text() for p in reader.pages)
     assert 'Report limitations' in reader.pages[-1].extract_text()
 
 
