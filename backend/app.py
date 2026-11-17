@@ -347,7 +347,8 @@ def weights_json(row, criteria):
     current = bool(row and row["criteria_revision"] == criteria["revision"])
     return {"criteria": selected, "criteria_revision": criteria["revision"],
             "weights": row["weights"] if current else {c["id"]: "0" for c in selected},
-            "revision": row["revision"] if row else 0, "approved": bool(current and row["approved"]),
+            "revision": row["revision"] if row else 0, "approved": bool(current and row["approved"] and row.get("method", "manual") == "manual"),
+            "method": row.get("method", "manual") if row else "manual",
             "needs_review": bool(row and not current)}
 
 
@@ -415,8 +416,9 @@ def get_eligibility(project_id: UUID):
         reviews = {r['supplier_id']:r for r in connection.execute('SELECT r.* FROM supplier_reviews r JOIN project_suppliers s ON s.id=r.supplier_id WHERE s.project_id=%s', (project_id,)).fetchall()}
         rows = [eligibility_supplier(s, reviews.get(s['id']), criteria) for s in suppliers]
         currency = connection.execute('SELECT currency FROM purchasing_projects WHERE id=%s', (project_id,)).fetchone()['currency']
+        weight_method = connection.execute('SELECT method FROM project_weights WHERE project_id=%s',(project_id,)).fetchone()['method']
     eligible = sum(s['eligibility'] == 'eligible' for s in rows)
-    return {'suppliers':rows, 'mandatory_checks':criteria['configuration']['mandatory_checks'],
+    return {'weight_method':weight_method, 'suppliers':rows, 'mandatory_checks':criteria['configuration']['mandatory_checks'],
             'maximum_price':criteria['configuration']['maximum_price'], 'currency':currency,
             'criteria_revision':criteria['revision'], 'eligible_count':eligible, 'ready':eligible >= 2}
 
@@ -463,14 +465,14 @@ def save_manual_weights(project_id: UUID, payload: ManualWeightsSave):
         values = {k: format(v, ".2f") for k, v in payload.weights.items()}
         row = connection.execute("SELECT * FROM project_weights WHERE project_id=%s FOR UPDATE", (project_id,)).fetchone()
         revision = row["revision"] if row else 0
-        if row and row["weights"] == values and row["approved"] == payload.approved and row["criteria_revision"] == payload.criteria_revision:
+        if row and row.get("method", "manual") == "manual" and row["weights"] == values and row["approved"] == payload.approved and row["criteria_revision"] == payload.criteria_revision:
             return weights_json(row, criteria)
         if payload.expected_revision != revision:
             raise HTTPException(409, "Weights changed in another window. Your entries are kept. Reload saved weights before editing again.")
         row = connection.execute("""INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved)
             VALUES (%s,%s,%s,1,%s) ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,
             criteria_revision=EXCLUDED.criteria_revision,revision=project_weights.revision+1,
-            approved=EXCLUDED.approved,updated_at=clock_timestamp() RETURNING *""",
+            approved=EXCLUDED.approved,method='manual',provenance='{}'::jsonb,updated_at=clock_timestamp() RETURNING *""",
             (project_id,Jsonb(values),payload.criteria_revision,payload.approved)).fetchone()
         touch_project(connection, project_id)
     return weights_json(row, criteria)
@@ -726,7 +728,9 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
                     'ranking': run['snapshot']}
         criteria, eligible, _, _ = matrix_context(connection, project_id)
         snapshot['reference'] = f"PRJ-{project['project_number']:06d}"
-        snapshot['weight_method'] = 'Manual percentage weighting (approved)'
+        active_weights = connection.execute('SELECT method,provenance FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
+        snapshot['weight_method'] = 'AHP pairwise weighting (approved)' if active_weights['method'] == 'ahp' else 'Manual percentage weighting (approved)'
+        snapshot['weight_provenance'] = active_weights['provenance']
         snapshot['eligibility'] = {'configuration': criteria['configuration'], 'suppliers': eligible}
         row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor)
             VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
@@ -760,3 +764,105 @@ def download_decision_report(project_id: UUID, decision_id: UUID):
         'Content-Disposition': f'attachment; filename="SDSS-decision-{decision_id}-v{report["version"]}.pdf"',
         'Cache-Control': 'no-store',
     })
+
+
+class AhpSave(BaseModel):
+    judgments: dict[str, str | None] = Field(max_length=105)
+    criteria_revision: int = Field(gt=0)
+    expected_revision: int = Field(ge=0)
+    expected_weight_revision: int = Field(ge=0)
+    approved: bool = False
+
+
+def ahp_context(connection, project_id):
+    import ahp
+    criteria = weighting_criteria(connection, project_id)
+    selected = [c for c in criteria['configuration']['criteria'] if c['selected']]
+    if len(selected) > 15:
+        raise HTTPException(422, 'AHP supports up to 15 scoring criteria. Manual weighting supports larger sets.')
+    keys = [a+':'+b for a,b in ahp.pairs([c['id'] for c in selected])]
+    draft = connection.execute('SELECT * FROM project_ahp WHERE project_id=%s', (project_id,)).fetchone()
+    weights = connection.execute('SELECT * FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
+    return criteria, selected, keys, draft, weights
+
+
+def ahp_json(criteria, selected, keys, draft, weights):
+    import ahp
+    current = bool(draft and draft['criteria_revision'] == criteria['revision'])
+    judgments = draft['judgments'] if current else {k:None for k in keys}
+    result = ahp.calculate([c['id'] for c in selected], judgments) if all(judgments.get(k) for k in keys) else None
+    approved = bool(current and weights and weights['approved'] and weights['method']=='ahp'
+                    and weights['criteria_revision']==criteria['revision'] and weights['provenance'].get('ahp_revision')==draft['revision'])
+    return {'criteria':selected,'criteria_revision':criteria['revision'],'judgments':judgments,'result':result,
+            'revision':draft['revision'] if draft else 0,'weight_revision':weights['revision'] if weights else 0,
+            'approved':approved,'needs_review':bool(draft and not current),'active_method':weights['method'] if weights else None}
+
+
+def validate_ahp(payload, criteria, keys):
+    import ahp
+    if payload.criteria_revision != criteria['revision']:
+        raise HTTPException(409, 'Criteria changed. Reload and review the AHP comparisons.')
+    if set(payload.judgments) != set(keys) or any(v is not None and v not in ahp.SCALE for v in payload.judgments.values()):
+        raise HTTPException(422, 'Use exactly the selected criterion pairs and the allowed comparison scale.')
+
+
+@app.get('/api/projects/{project_id}/weights/ahp')
+def get_ahp(project_id: UUID):
+    with database.connect() as connection:
+        return ahp_json(*ahp_context(connection, project_id))
+
+
+@app.post('/api/projects/{project_id}/weights/ahp/calculate')
+def calculate_ahp(project_id: UUID, payload: AhpSave):
+    import ahp
+    with database.connect() as connection:
+        criteria,selected,keys,_,_ = ahp_context(connection, project_id)
+        validate_ahp(payload,criteria,keys)
+        try: return ahp.calculate([c['id'] for c in selected],payload.judgments)
+        except ValueError as error: raise HTTPException(422,str(error)) from None
+
+
+@app.put('/api/projects/{project_id}/weights/ahp')
+def save_ahp(project_id: UUID, payload: AhpSave):
+    import ahp
+    from psycopg.types.json import Jsonb
+    with database.connect() as connection:
+        criteria,selected,keys,draft,weights = ahp_context(connection, project_id)
+        validate_ahp(payload,criteria,keys)
+        current = ahp_json(criteria,selected,keys,draft,weights)
+        if draft and draft['criteria_revision']==payload.criteria_revision and draft['judgments']==payload.judgments and current['approved']==payload.approved:
+            return current
+        if payload.expected_revision != current['revision'] or payload.expected_weight_revision != current['weight_revision']:
+            raise HTTPException(409, 'Comparisons or active weights changed in another window. Your answers are kept. Reload before saving.')
+        result = None
+        if payload.approved:
+            try: result = ahp.calculate([c['id'] for c in selected],payload.judgments)
+            except ValueError as error: raise HTTPException(422,str(error)) from None
+            if not result['acceptable']:
+                raise HTTPException(422, 'Consistency ratio exceeds 0.10. Review comparisons before approval.')
+        draft = connection.execute('''INSERT INTO project_ahp(project_id,judgments,criteria_revision,revision) VALUES (%s,%s,%s,1)
+            ON CONFLICT(project_id) DO UPDATE SET judgments=EXCLUDED.judgments,criteria_revision=EXCLUDED.criteria_revision,
+            revision=project_ahp.revision+1,updated_at=clock_timestamp() RETURNING *''',
+            (project_id,Jsonb(payload.judgments),payload.criteria_revision)).fetchone()
+        if payload.approved:
+            provenance={'ahp_revision':draft['revision'],'judgments':payload.judgments,'result':result}
+            weights = connection.execute('''INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved,method,provenance)
+                VALUES (%s,%s,%s,1,true,'ahp',%s) ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,
+                criteria_revision=EXCLUDED.criteria_revision,revision=project_weights.revision+1,approved=true,
+                method='ahp',provenance=EXCLUDED.provenance,updated_at=clock_timestamp() RETURNING *''',
+                (project_id,Jsonb(result['weights']),payload.criteria_revision,Jsonb(provenance))).fetchone()
+        elif weights and weights['method']=='ahp' and weights['approved']:
+            weights = connection.execute('UPDATE project_weights SET approved=false,revision=revision+1,updated_at=clock_timestamp() WHERE project_id=%s RETURNING *', (project_id,)).fetchone()
+        history_result = result or (ahp.calculate([c['id'] for c in selected],payload.judgments) if all(payload.judgments.values()) else None)
+        connection.execute('INSERT INTO project_ahp_versions(project_id,revision,snapshot) VALUES (%s,%s,%s)',
+            (project_id,draft['revision'],Jsonb({'criteria':selected,'criteria_revision':criteria['revision'],'judgments':payload.judgments,'result':history_result,'approved':payload.approved})))
+        touch_project(connection,project_id)
+        return ahp_json(criteria,selected,keys,draft,weights)
+
+
+@app.get('/api/projects/{project_id}/weights/ahp/history')
+def ahp_history(project_id: UUID):
+    with database.connect() as connection:
+        require_project(connection, project_id)
+        rows = connection.execute('SELECT revision,snapshot,created_at FROM project_ahp_versions WHERE project_id=%s ORDER BY revision DESC LIMIT 20',(project_id,)).fetchall()
+        return {'versions':[{'revision':r['revision'],'snapshot':r['snapshot'],'created_at':r['created_at'].isoformat()} for r in rows]}

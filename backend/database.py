@@ -142,6 +142,27 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (8)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 9").fetchone():
+            connection.execute("""
+                ALTER TABLE project_weights ADD COLUMN method text NOT NULL DEFAULT 'manual' CHECK (method IN ('manual','ahp'));
+                ALTER TABLE project_weights ADD COLUMN provenance jsonb NOT NULL DEFAULT '{}'::jsonb;
+                CREATE TABLE project_ahp (
+                    project_id uuid PRIMARY KEY REFERENCES purchasing_projects(id) ON DELETE CASCADE,
+                    judgments jsonb NOT NULL,
+                    criteria_revision integer NOT NULL,
+                    revision integer NOT NULL CHECK (revision > 0),
+                    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE TABLE project_ahp_versions (
+                    project_id uuid NOT NULL REFERENCES purchasing_projects(id),
+                    revision integer NOT NULL,
+                    snapshot jsonb NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    PRIMARY KEY(project_id,revision)
+                );
+                INSERT INTO sdss_migrations(version) VALUES (9)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

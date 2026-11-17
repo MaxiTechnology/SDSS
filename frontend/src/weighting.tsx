@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {api} from './api';
-type Saved={criteria:{id:string;name:string;unit:string}[];criteria_revision:number;weights:Record<string,string>;revision:number;approved:boolean;needs_review:boolean};
+type Saved={method?:string;criteria:{id:string;name:string;unit:string}[];criteria_revision:number;weights:Record<string,string>;revision:number;approved:boolean;needs_review:boolean};
 export function ManualWeighting({projectId}:{projectId:string}){
  const base=`/api/projects/${projectId}/weights/manual`;
  const [saved,setSaved]=useState<Saved|null>(null),[weights,setWeights]=useState<Record<string,string>>({}),[reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -14,6 +14,7 @@ export function ManualWeighting({projectId}:{projectId:string}){
  async function save(approved:boolean){if(!saved||busy||!valid)return;setBusy(true);setError('');setNotice('');try{const data=await api<Saved>(base,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({weights,criteria_revision:saved.criteria_revision,expected_revision:saved.revision,approved})});setSaved(data);setWeights(data.weights);setReviewed(data.approved);setNotice(approved?'Manual weights approved and saved.':'Draft weights saved.');}catch(e){setError(e instanceof Error?e.message:'Saving failed. Your entries are kept.');}finally{setBusy(false);}}
  if(!saved)return <section>{error?<div role="alert" className="error">{error}<button onClick={()=>void load()}>Try again</button></div>:<p>Loading weights…</p>}</section>;
  return <section className="project-form weighting-page"><h2>Manual Weighting</h2><p>Assign importance to each selected scoring criterion. The total must equal 100% before approval. Mandatory checks receive no weight.</p>
+ {saved.method==='ahp'&&<p className="info">AHP weights are active. Saving on this page switches to manual weighting and requires approval.</p>}<button className="secondary" disabled={busy} onClick={()=>{if(!dirty||confirm('Discard unsaved manual weights?'))location.hash=`/projects/${projectId}/weights/ahp`;}}>Use AHP Pairwise Weighting</button>
  {error&&<div role="alert" className="error">{error}<button onClick={()=>{if(!dirty||confirm('Discard unsaved weights and reload?'))void load();}}>Reload saved weights</button></div>}
  {notice&&<div role="status" className="success">{notice}</div>}
  {saved.needs_review&&<p className="info">Criteria changed. Assign and approve weights again for the current criteria.</p>}

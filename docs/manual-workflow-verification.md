@@ -20,7 +20,7 @@ The API journey and browser page checks complement each other. There is no claim
 
 ## Remaining work
 
-- SDSS-009: AHP comparisons, diagnostics, persistence and approval.
+- SDSS-009: AHP comparisons, diagnostics, persistence, approval and saved version history were added after the manual acceptance check. Separate tests verify the AHP path; user acceptance remains pending.
 - SDSS-010: AI suggestions; provider/model and approved context remain undecided. Manual fallback works.
 - SDSS-011: evidence file upload/storage and access scope. Current pass/fail reviews use notes without attachments.
 - SDSS-014: sensitivity trials are temporary; reports truthfully identify the absence of saved findings.

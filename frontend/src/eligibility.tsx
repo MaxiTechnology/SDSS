@@ -3,7 +3,7 @@ import {api} from './api';
 
 type Determination={status:'pending'|'passed'|'failed';notes:string};
 type Supplier={id:string;name:string;updated_at:string;checks:Record<string,Determination>;total_price:string|null;price_status:string|null;eligibility:string;revision:number;needs_review:boolean;reviewer:string|null;reviewed_at:string|null};
-type Saved={suppliers:Supplier[];mandatory_checks:{id:string;name:string;requirement:string}[];maximum_price:string|null;currency:string;criteria_revision:number;eligible_count:number;ready:boolean};
+type Saved={weight_method?:string;suppliers:Supplier[];mandatory_checks:{id:string;name:string;requirement:string}[];maximum_price:string|null;currency:string;criteria_revision:number;eligible_count:number;ready:boolean};
 
 export function Eligibility({projectId}:{projectId:string}){
  const base=`/api/projects/${projectId}/eligibility`;
@@ -22,7 +22,7 @@ export function Eligibility({projectId}:{projectId:string}){
   setSaved({...saved,suppliers,eligible_count,ready:eligible_count>=2});dialog.current?.close();setActive(null);setNotice(`Review saved for ${row.name}.`);
  }catch(e){setError(e instanceof Error?e.message:'Saving failed. Your entries are kept.');}finally{setBusy(false);}}
  if(!saved)return <section><p role="alert">{error||'Loading eligibility…'}</p><button className="secondary" disabled={busy} onClick={()=>void load()}>Reload</button>
- <button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/weights/manual`}>Back to Manual Weighting</button></section>;
+ <button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/criteria`}>Back to Criteria</button></section>;
  const valid=Object.values(checks).every(c=>c.status==='pending'||!!c.notes.trim())&&(!price||/^\d+(\.\d{1,2})?$/.test(price));
  return <section className="supplier-page eligibility-page">
  <div className="card-heading"><div><h2>Supplier Eligibility Review</h2><p>Only suppliers who pass every mandatory requirement qualify for scoring.</p></div><span className="chip">{saved.eligible_count} eligible · {saved.suppliers.length-saved.eligible_count} excluded or pending</span></div>
@@ -34,7 +34,7 @@ export function Eligibility({projectId}:{projectId:string}){
  <div className="table-scroll"><table><thead><tr><th>Supplier</th><th>Mandatory checks</th><th>Eligibility</th><th>Review</th></tr></thead><tbody>{saved.suppliers.map(s=><tr key={s.id}><td><strong>{s.name}</strong>{s.needs_review&&<p>Supplier or criteria changed. Review again.</p>}</td><td>{Object.values(s.checks).filter(c=>c.status==='passed').length} / {saved.mandatory_checks.length} checks passed{saved.maximum_price!==null&&<p>Price limit: {s.price_status}</p>}</td><td><span className={`chip status-${s.eligibility}`}>{s.eligibility}</span></td><td><button className="secondary" onClick={()=>{setActive(s);setChecks(structuredClone(s.checks));setPrice(s.total_price??'');setError('');}}>Review {s.name}</button>{s.reviewed_at&&<small className="review-meta">{s.reviewer}<br/>{new Date(s.reviewed_at).toLocaleString()}</small>}</td></tr>)}</tbody></table></div>
  <p role="status" className={saved.ready?'success':'error'}>{saved.ready?'Minimum eligible pool met.':'At least two suppliers must qualify before evaluation.'}</p>
  <button className="primary" disabled={!saved.ready||busy} onClick={()=>location.hash=`/projects/${projectId}/matrix`}>Continue to Evaluation Matrix →</button>
- <button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/weights/manual`}>← Back to Manual Weighting</button> <button className="secondary" onClick={()=>void load()} disabled={busy}>Refresh Reviews</button>
+ <button className="secondary" onClick={()=>location.hash=`/projects/${projectId}/weights/${saved.weight_method==='ahp'?'ahp':'manual'}`}>← Back to {saved.weight_method==='ahp'?'AHP':'Manual'} Weighting</button> <button className="secondary" onClick={()=>void load()} disabled={busy}>Refresh Reviews</button>
  <dialog ref={dialog} onCancel={e=>{e.preventDefault();close();}} aria-labelledby="review-title">
  <div className="dialog-heading"><h2 id="review-title">Review: {active?.name}</h2><button aria-label="Close review" disabled={busy} onClick={close}>×</button></div>
  <div className="dialog-body project-form review-form">

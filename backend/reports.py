@@ -36,6 +36,7 @@ def report_data(row):
         'revision_reason': snapshot['revision_reason'] or 'Not a revision.',
         'method': ranking.get('method', 'TOPSIS vector normalization v1'),
         'weight_method': snapshot.get('weight_method', 'Approved percentage weights; weighting source was not recorded in this older snapshot.'),
+        'weight_diagnostics': snapshot.get('weight_provenance', {}).get('result'),
         'criteria': [{**c, 'weight': ranking['weights'][c['id']]} for c in criteria],
         'rankings': ranking['result']['rows'],
         'values': [{'supplier': s['name'], 'criterion': c['name'], 'unit': c['unit'], 'value': ranking['entries'][s['id']][c['id']]} for s in ranking['suppliers'] for c in criteria],
@@ -91,6 +92,9 @@ def render_pdf(report):
     section('Saved supplier rankings',['Scores range from 0 to 1. Higher is better. Displayed scores are rounded to six decimal places; saved ranks use unrounded scores.'])
     table(['Rank','Supplier','TOPSIS score'],[[r['rank'],r['name'],f"{Decimal(r['score']):.6f}"] for r in report['rankings']],[40,365,100])
     section('Criteria and approved weights',[report['method'], report['weight_method']])
+    if report.get('weight_diagnostics'):
+        d=report['weight_diagnostics']
+        section('AHP consistency', [f"CR: {d['cr']} | CI: {d['ci']} | RI: {d['ri']} | Lambda max: {d['lambda_max']}", d['method']])
     table(['Criterion','Unit','Preference','Weight (%)'],[[c['name'],c['unit'],'Lower is better' if c['direction']=='cost' else 'Higher is better',c['weight']] for c in report['criteria']],[185,90,140,90])
     section('Saved supplier input values',['Prices and other commercial values below reproduce the saved evaluation matrix. Units are those configured for this project.'])
     table(['Supplier','Criterion','Value','Unit'],[[v['supplier'],v['criterion'],v['value'],v['unit']] for v in report['values']],[155,175,80,95])

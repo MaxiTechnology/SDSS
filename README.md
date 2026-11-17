@@ -15,7 +15,7 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-Manual weighting, eligibility, evaluation matrices, TOPSIS rankings, temporary sensitivity analysis, versioned decisions and saved PDF reports are implemented. AI/AHP weighting and evidence uploads remain unfinished. The project budget is a planning amount unless a separate mandatory maximum price is enabled. Changes to evaluation inputs invalidate affected approvals, matrices, rankings and decisions while preserving historical reports.
+Manual weighting, eligibility, evaluation matrices, TOPSIS rankings, temporary sensitivity analysis, versioned decisions and saved PDF reports are implemented. AI weighting and evidence uploads remain unfinished; AHP is described below. The project budget is a planning amount unless a separate mandatory maximum price is enabled. Changes to evaluation inputs invalidate affected approvals, matrices, rankings and decisions while preserving historical reports.
 
 Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Approved weights unlock supplier eligibility review.
 
@@ -29,7 +29,7 @@ Review decisions are attributed to Demo User (unauthenticated), with a saved tim
 2. Run `npm ci` inside `frontend`.
 3. Inside `backend`, run `python -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt`.
 4. Double-click `Connect cloud database.cmd` and enter your Neon connection strings privately. Alternatively set the backend `DATABASE_URL` environment variable. Never put credentials in frontend settings.
-5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply the versioned project, supplier, criteria, manual-weight eligibility-review and evaluation-matrix storage migrations. It is safe to run again.
+5. Inside `backend`, run `.\.venv\Scripts\python.exe database.py` to apply all versioned storage migrations, including AHP weighting. It is safe to run again.
 
 Database setup utilities only verify and save the connection. The separate migration command creates application tables. Existing data is preserved.
 
@@ -126,3 +126,18 @@ Install updated dependencies with the backend virtual environment using python -
 The manual journey has an isolated cloud acceptance test: test_manual_journey.py. It creates its own schema, applies migrations twice, creates a synthetic project and three suppliers, requires weight approval, checks pending eligibility, passes two suppliers and fails one, rejects an incomplete matrix, calculates TOPSIS, runs a sensitivity scenario without changing the baseline, confirms a human decision and downloads its PDF. It then changes an eligibility review and verifies stale ranking/decision warnings while the saved report remains unchanged. A cross-project report request is rejected. The schema is removed in a finally block; the user's demonstration project is not edited.
 
 Component browser tests cover the individual pages with mocked APIs; they are not a full browser journey against Neon. This verification does not complete SDSS-017: AHP, AI weighting, file uploads, broader accessibility/viewport review and recovery/deployment checks remain. See docs/manual-workflow-verification.md for the current acceptance record and release gaps.
+
+
+## AHP pairwise weighting (SDSS-009)
+
+Choose Use AHP Pairwise Weighting from saved criteria or the manual-weighting page. For n selected criteria, answer n(n-1)/2 comparisons using integers 1–9 or exact reciprocal codes 1/2–1/9. First/second labels follow the table columns. Mandatory checks receive no weight. Empty comparisons remain unanswered; they are not assumed equal. Drafts and the latest 20 saved comparison versions can be reopened. Calculation previews do not write active weights.
+
+Policy: use the positive reciprocal matrix, diagonal 1, and principal right eigenvector (power iteration, Decimal precision 50, maximum 10,000 iterations, convergence delta below 1e-35). Lambda max is the mean of (Aw)i/wi. CI = max(0, (lambda max - n)/(n-1)); CR = CI/RI. For n=2, CR=0 because a reciprocal two-criterion matrix is always consistent. Approval requires every comparison and unrounded CR <= 0.10. A low CR measures internal agreement, not correctness of priorities.
+
+RI values for n=2..15: 0, 0.58, 0.90, 1.12, 1.24, 1.32, 1.41, 1.45, 1.49, 1.51, 1.48, 1.56, 1.57, 1.59. AHP supports up to 15 scoring criteria because this implementation uses that published RI table; manual weighting still supports 20. Definitions follow [Saaty, 2008](https://doi.org/10.1504/IJSSCI.2008.017590), with consistency/RI variations discussed in [Consistency Improvement in the Analytic Hierarchy Process, 2024](https://www.mdpi.com/2227-7390/12/6/828). RI tables differ between publications, so the exact values above are part of the stored calculation policy.
+
+Applied weights use largest-remainder allocation to 10,000 percentage basis points and therefore total exactly 100.00%. Fractional remainders are quantized at 1e-25 before ordering to make arithmetic-noise ties deterministic; criterion order breaks equal remainders. TOPSIS uses these approved two-decimal percentages. CR uses the unrounded eigenvector, not the rounded weights.
+
+Migration 9 adds AHP drafts, append-only comparison versions, and weighting method/provenance. Saving or previewing an AHP draft while manual weighting is active leaves manual weights unchanged. Approving AHP atomically publishes its weights and provenance; a saved edit to active AHP removes its approval. Manual saves explicitly switch the source back to manual. Criteria and weight revision checks protect concurrent changes; repeated identical submissions do not create duplicate comparison versions. Changed weight versions invalidate affected matrices, rankings and current decisions. Historical reports remain unchanged. Eligibility return navigation follows the active weighting method.
+
+New confirmed decisions capture AHP judgments and diagnostics in their snapshot; both report screen and PDF identify the AHP method and show consistency diagnostics. Existing approvals are not retroactively altered. Verification includes consistent ratio weights, an independently solvable inconsistent cyclic matrix, reciprocity, exact totals, two-criterion and 15-criterion cases, unrounded threshold boundaries, invalid inputs, API persistence/retries/conflicts, method switches, history, criteria invalidation, downstream reports and browser failure recovery. Authentication and AI suggestions remain separate work.
