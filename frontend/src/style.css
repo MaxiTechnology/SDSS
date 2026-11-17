@@ -650,3 +650,20 @@ dialog::backdrop { background:#0006; }
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
 .decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }
+
+.dashboard-cards {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin:20px 0 30px;}
+.dashboard-cards>button,.dashboard-cards>div {background:white;border:1px solid #dce2ed;border-radius:10px;text-align:left;padding:22px;color:#203147;}
+.dashboard-cards span {display:block;font-size:14px;}
+.dashboard-cards strong {display:block;font-size:30px;margin-top:10px;}
+.workflow-counts {display:flex;flex-wrap:wrap;gap:10px;margin:20px 0 30px;}
+.project-status-filter {display:flex;align-items:center;gap:8px;}
+.project-status-filter select {font:inherit;padding:10px;border:1px solid #dce2ed;border-radius:6px;background:white;}
+.toolbar {flex-wrap:wrap;gap:12px;}
+.dashboard h2 {margin-top:25px;}
+.dashboard td button {margin:4px;}
+
+.dashboard-cards>button {display:block;}
+.dashboard td small.supplier-note {display:block;background:none;padding:4px 0;font-size:12px;}
+.chip[data-status="Approved"] {background:#dcfce7;color:#166534;}
+.chip[data-status="Deferred"] {background:#fef3c7;color:#92400e;}
+.chip[data-status="Needs review"] {background:#fee2e2;color:#991b1b;}

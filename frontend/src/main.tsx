@@ -1,3 +1,4 @@
+import { Dashboard, WORKFLOW_STATUSES } from './dashboard';
 import { AIWeighting } from './ai';
 import { AhpWeighting } from './ahp';
 import { DecisionReport } from './report';
@@ -28,6 +29,11 @@ type Project = {
   status: string;
   updated_at: string;
   supplier_count?: number;
+  workflow_status?: string;
+  workflow_stage?: string;
+  resume_path?: string;
+  last_activity_at?: string;
+  decision_id?: string | null;
 };
 const empty = {
   name: "",
@@ -57,6 +63,8 @@ function App() {
   const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [statusFilter,setStatusFilter]=useState("All");
+  const dashboardView=route==="/dashboard";
   const fresh = route === "/new",
     detail = route.startsWith("/projects/"),
     formView = fresh || detail;
@@ -153,9 +161,10 @@ function App() {
     }
   }
   const visible = items.filter((p) =>
-    `${p.name} ${p.reference}`.toLowerCase().includes(search.toLowerCase()),
+    `${p.name} ${p.reference} ${p.category}`.toLowerCase().includes(search.toLowerCase()) && (statusFilter==="All"||(p.workflow_status||p.status)===statusFilter),
   );
   const pages = Math.max(1, Math.ceil(visible.length / 6));
+  useEffect(()=>{setPage(current=>Math.min(current,pages));},[pages]);
   return (
     <div className="layout">
       <aside>
@@ -178,10 +187,10 @@ function App() {
           ].map((v, i) => (
             <button
               key={v}
-              disabled={i !== 1}
-              title={i !== 1 ? "Available in a later update" : undefined}
-              className={i === 1 ? "active" : ""}
-              onClick={() => go("/")}
+              disabled={i !== 1 && i !== 0}
+              title={i !== 1 && i !== 0 ? "Available in a later update" : undefined}
+              className={(i===0&&dashboardView)||(i===1&&!dashboardView)?"active":""}
+              onClick={() => go(i===0?"/dashboard":"/")}
             >
               <Icon n={14 + i} />
               {v}
@@ -199,7 +208,7 @@ function App() {
         <header>
           <div className="global-search">
             <Icon n={10} />
-            Search projects, suppliers…
+            Supplier decision workspace
           </div>
           <span className="demo">DEMO WORKSPACE • SYNTHETIC DATA</span>
           <b className="avatar">DU</b>
@@ -249,10 +258,9 @@ function App() {
           ) : (
             <div className="list-heading">
               <div>
-                <h1>Purchasing Projects</h1>
+                <h1>{dashboardView?"Dashboard":"Purchasing Projects"}</h1>
                 <p className="subtitle">
-                  Manage multi-criteria supplier evaluation projects and
-                  decision workflows.
+                  {dashboardView?"Track saved projects, current approvals and work needing review.":"Manage multi-criteria supplier evaluation projects and decision workflows."}
                 </p>
               </div>
               <button className="primary" onClick={() => go("/new")}>
@@ -274,6 +282,8 @@ function App() {
           )}
           {loading ? (
             <p role="status">Loading projects…</p>
+          ) : error && !formView ? (<p role="status">Saved project data could not be refreshed. Use Try again above.</p>) : dashboardView ? (
+            <Dashboard onRefresh={()=>void load()} projects={items} onFilter={status=>{setStatusFilter(status);setSearch("");setPage(1);go("/");}} onOpen={p=>{setNotice("");go(p.resume_path||`/projects/${p.id}`);}} onReport={p=>go(`/projects/${p.id}/reports/${p.decision_id}`)} />
           ) : reportView && project ? (
             <DecisionReport key={route} projectId={project.id} decisionId={route.split("/")[4]} />
           ) : decisionView && project ? (
@@ -439,7 +449,7 @@ function App() {
                     }}
                   />
                 </label>
-                <span className="tab">All ({items.length})</span>
+                <label className="project-status-filter">Status<select aria-label="Filter projects by status" value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1);}}><option value="All">All ({items.length})</option>{WORKFLOW_STATUSES.map(status=><option key={status} value={status}>{status} ({items.filter(p=>(p.workflow_status||p.status)===status).length})</option>)}</select></label><button className="secondary" onClick={()=>{setSearch("");setStatusFilter("All");setPage(1);}}>Clear filters</button><button className="secondary" onClick={()=>void load()}>Refresh projects</button>
               </div>
               <section className="table-card">
                 <div className="table-scroll">
@@ -480,10 +490,10 @@ function App() {
                             <td>{p.category || "Not specified"}</td>
                             <td>{p.supplier_count ?? 0} Added</td>
                             <td>
-                              <span className="chip">Draft</span>
+                              <span className="chip" data-status={p.workflow_status||p.status}>{p.workflow_status||p.status}</span><small className="supplier-note">{p.workflow_stage}</small>
                             </td>
                             <td>
-                              {new Date(p.updated_at).toLocaleDateString(
+                              {new Date(p.last_activity_at||p.updated_at).toLocaleDateString(
                                 undefined,
                                 {
                                   month: "short",
@@ -502,7 +512,7 @@ function App() {
                               >
                                 Open Project
                                 <Icon n={5} list />
-                              </button>
+                              </button>{p.resume_path&&<button className="secondary" onClick={()=>go(p.resume_path!)}>Continue Workflow</button>}
                             </td>
                           </tr>
                         ))}
@@ -518,7 +528,7 @@ function App() {
                     </h2>
                     <p>
                       {items.length
-                        ? "Try another project name or reference."
+                        ? "Try another project name, reference, category or status filter."
                         : "Create your first purchasing project to get started."}
                     </p>
                     {!items.length && (

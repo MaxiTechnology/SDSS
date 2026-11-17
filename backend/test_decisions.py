@@ -54,6 +54,7 @@ def test_decision_history_retries_and_stale_inputs(monkeypatch):
         defer={**payload,'id':str(uuid4()),'expected_version':2,'action':'defer','supplier_id':None,'reason':'Await funding','revision_reason':'Funding review'}
         result=client.post(base+'/decisions',json=defer);assert result.status_code==200,result.text
         assert result.json()['snapshot']['supplier'] is None
+        assert client.get('/api/projects').json()[0]['workflow_status']=='Deferred'
         assert client.get(base+'/rankings').json()['snapshot']==run['snapshot']
         history=client.get(base+'/decisions').json()['decisions'];assert [d['version'] for d in history]==[3,2,1]
         assert history[2]['snapshot']==saved.json()['snapshot']

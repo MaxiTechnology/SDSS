@@ -24,7 +24,7 @@ The API journey and browser page checks complement each other. There is no claim
 - SDSS-010: AI suggestion generation, strict validation, adjustment, provenance/history and explicit approval are implemented. The user verified Cloudflare setup; a live synthetic suggestion and isolated API/browser checks passed. User acceptance of the full AI journey remains pending. Manual and AHP fallback work.
 - SDSS-011: evidence file upload/storage and access scope. Current pass/fail reviews use notes without attachments.
 - SDSS-014: sensitivity trials are temporary; reports truthfully identify the absence of saved findings.
-- SDSS-018: real dashboard metrics, workflow statuses and secondary lists. Project-list Draft labels do not yet derive from approval/deferral state.
+- SDSS-018: real dashboard metrics, derived project statuses, status filters and workflow/report navigation are implemented. Global secondary supplier/evaluation/report/settings lists remain disabled; user acceptance of dashboard and filtering is pending.
 - SDSS-017: full AHP/AI journeys, broader accessibility/mobile review and recovery/deployment verification remain incomplete.
 - Login, roles, operational safeguards and real purchasing authorization are outside current demonstration readiness. APIs must stay local.
 
@@ -40,3 +40,8 @@ Do not mark the whole project or SDSS-017 Done based on the manual journey alone
 - Migration 10 was applied. No real project weighting, evaluation matrix, ranking or purchasing decision was altered by verification.
 - AI-assisted PDF layout was rendered and visually inspected. The report distinguishes original suggestions and approved weights and includes provider/model, priorities, explanations and review notes.
 - User acceptance of AI generation, approval and the downstream report is pending. SDSS-017 and the whole project remain incomplete.
+
+
+## Dashboard implementation verification - 2026-11-18
+
+The read-only cloud projection identified the user project as Approved and counted three supplier entries. No saved project, weights, matrix or decision was modified. The isolated manual journey verified Draft -> Evaluated -> Approved -> Needs review; the decision journey verified Deferred. Default backend checks passed (53 passed, seven opt-in integration skips). Browser checks cover totals, count-card filters, category search, empty results, six-row pagination, workflow navigation, and unavailable-state retry. User acceptance remains pending; do not mark the full release complete.

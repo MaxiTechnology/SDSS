@@ -28,6 +28,7 @@ def test_manual_journey_with_mandatory_checks_and_report(monkeypatch):
         pid=str(uuid4());base='/api/projects/'+pid
         project=request('POST','/api/projects',{'id':pid,'name':'Synthetic manual acceptance','currency':'USD','estimated_budget':'500'},201)
         assert request('GET',base)['name']==project['name']
+        assert request('GET','/api/projects')[0]['workflow_status']=='Draft'
         suppliers=[request('POST',base+'/suppliers',{'id':str(uuid4()),'name':name},201) for name in ['Alpha','Beta','Excluded']]
         config={'criteria':[{'id':'price','name':'Price','unit':'USD','direction':'cost','minimum':'0'},{'id':'quality','name':'Quality','unit':'points / 100','direction':'benefit','minimum':'0','maximum':'100'}], 'mandatory_checks':[{'id':'certificate','name':'Certificate','requirement':'Valid synthetic certificate'}], 'maximum_price':'150','expected_revision':0}
         request('PUT',base+'/criteria',config)
@@ -50,10 +51,12 @@ def test_manual_journey_with_mandatory_checks_and_report(monkeypatch):
         saved=request('PUT',base+'/matrix',{'context':matrix['context'],'expected_revision':1,'entries':entries});assert saved['ready']
         ranking=request('POST',base+'/rankings',{'context':matrix['context'],'matrix_revision':2})
         assert ranking['snapshot']['result']['rows'][0]['name']=='Alpha'
+        assert request('GET','/api/projects')[0]['workflow_status']=='Evaluated'
         scenario=request('POST',base+'/sensitivity',{'baseline_id':ranking['id'],'weights':{'price':'90','quality':'10'}})
         assert scenario['baseline_id']==ranking['id']
         assert request('GET',base+'/rankings')['snapshot']==ranking['snapshot']
         decision=request('POST',base+'/decisions',{'id':str(uuid4()),'ranking_id':ranking['id'],'expected_version':0,'action':'approve','supplier_id':suppliers[0]['id'],'confirmed':True,'reason':'Synthetic acceptance approval'})
+        assert request('GET','/api/projects')[0]['workflow_status']=='Approved'
         path=base+'/decisions/'+decision['id']+'/report'
         report=request('GET',path);assert report['selected_supplier']=='Alpha'
         assert any('Certificate: passed' in n for n in report['eligibility_notes'])
@@ -64,6 +67,7 @@ def test_manual_journey_with_mandatory_checks_and_report(monkeypatch):
         s=suppliers[0]
         review={'checks':{'certificate':{'status':'failed','notes':'Synthetic expiry review'}},'total_price':'100','currency':'USD','criteria_revision':1,'supplier_updated_at':s['updated_at'],'expected_revision':1}
         request('PUT',base+'/eligibility/'+s['id'],review)
+        assert request('GET','/api/projects')[0]['workflow_status']=='Needs review'
         assert request('GET',base+'/rankings')['stale']
         assert request('GET',base+'/decisions')['decisions'][0]['stale']
         assert request('GET',path)==report

@@ -59,9 +59,9 @@ def serialize(row):
 
 @app.get("/api/projects")
 def projects():
+    from workflow import load_projects
     with database.connect() as connection:
-        rows = connection.execute("SELECT p.*, (SELECT count(*) FROM project_suppliers s WHERE s.project_id=p.id) AS supplier_count FROM purchasing_projects p ORDER BY created_at DESC, id DESC").fetchall()
-    return [serialize(row) for row in rows]
+        return load_projects(connection,serialize,eligibility_supplier,matrix_errors)
 
 
 @app.get("/api/projects/{project_id}")
@@ -492,8 +492,6 @@ class MatrixSave(BaseModel):
 
 
 def matrix_context(connection, project_id):
-    import hashlib
-    import json
     criteria = eligibility_context(connection, project_id)
     suppliers = connection.execute('SELECT * FROM project_suppliers WHERE project_id=%s ORDER BY created_at,id', (project_id,)).fetchall()
     reviews = {r['supplier_id']:r for r in connection.execute('SELECT r.* FROM supplier_reviews r JOIN project_suppliers s ON s.id=r.supplier_id WHERE s.project_id=%s', (project_id,)).fetchall()}
@@ -502,7 +500,8 @@ def matrix_context(connection, project_id):
     if len(eligible) < 2:
         raise HTTPException(422, 'At least two eligible suppliers are required for the evaluation matrix.')
     weights = connection.execute('SELECT * FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
-    token = hashlib.sha256(json.dumps([criteria['revision'],criteria['currency'],weights['revision'],[(s['id'],s['updated_at'],s['revision']) for s in eligible]],default=str).encode()).hexdigest()
+    from workflow import matrix_token
+    token = matrix_token(criteria,weights,eligible)
     selected = [c for c in criteria['configuration']['criteria'] if c['selected']]
     return criteria, eligible, selected, token
 
@@ -606,7 +605,7 @@ def get_ranking(project_id: UUID):
         # Preserve access to historical snapshots even when the current pool is no longer ready.
         project = connection.execute('SELECT id FROM purchasing_projects WHERE id=%s FOR UPDATE',(project_id,)).fetchone()
         if not project: raise HTTPException(404,'Project not found.')
-        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC LIMIT 1',(project_id,)).fetchone()
+        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',(project_id,)).fetchone()
         if not row: raise HTTPException(404,'No rankings yet. Complete the matrix and calculate rankings.')
         try:
             _,_,_,context = matrix_context(connection,project_id)
@@ -636,7 +635,7 @@ def simulate_sensitivity(project_id: UUID, payload: SensitivityRequest):
     with database.connect() as connection:
         _,_,_,context = matrix_context(connection,project_id)
         matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
-        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC LIMIT 1',(project_id,)).fetchone()
+        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',(project_id,)).fetchone()
         if not row or row['id'] != payload.baseline_id or not matrix or ranking_json(row,context,matrix['revision'])['stale']:
             raise HTTPException(409,'The baseline changed. Calculate current rankings before running a scenario.')
         snapshot = row['snapshot']
@@ -683,7 +682,7 @@ def decision_current(connection, project_id, ranking_id):
     except HTTPException:
         return False
     matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s', (project_id,)).fetchone()
-    run = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC LIMIT 1', (project_id,)).fetchone()
+    run = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1', (project_id,)).fetchone()
     return bool(run and run['id'] == ranking_id and matrix and not ranking_json(run, context, matrix['revision'])['stale'])
 
 
