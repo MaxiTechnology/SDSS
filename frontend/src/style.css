@@ -647,3 +647,6 @@ dialog::backdrop { background:#0006; }
 .matrix-cell-error { display:block; color:#b42318; font-size:12px; margin-top:6px; }
 
 .decision-report p { overflow-wrap:anywhere; }
+
+.decision-page .inline-check { display:flex; align-items:center; gap:10px; }
+.decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }

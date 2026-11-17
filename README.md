@@ -15,7 +15,7 @@ Add, edit and remove suppliers within a saved project, with required names and o
 
 Choose and configure scoring criteria after saving at least two suppliers. Five defaults are provided; custom criteria support units, higher/lower preferences and optional ranges. At least two criteria must be selected, with a maximum of 20. Separate mandatory requirements and an optional maximum price can be saved. Criteria persist with revision checks to protect newer edits and retain entries on failed saves.
 
-AI/AHP weighting, final decisions and reports remain future tickets. The project budget remains a planning amount. Supplier changes update the project timestamp; criteria revisions will support result invalidation when calculation results exist.
+Manual weighting, eligibility, evaluation matrices, TOPSIS rankings, temporary sensitivity analysis, versioned decisions and saved PDF reports are implemented. AI/AHP weighting and evidence uploads remain unfinished. The project budget is a planning amount unless a separate mandatory maximum price is enabled. Changes to evaluation inputs invalidate affected approvals, matrices, rankings and decisions while preserving historical reports.
 
 Manual weighting supports saved drafts, two-decimal percentage inputs, equal distribution and explicit approval only at exactly 100%. Only selected scoring criteria receive weights. Changed criteria invalidate prior weight approval and require reassignment. Stale saves are rejected; failed saves keep entries. Approved weights unlock supplier eligibility review.
 
@@ -119,3 +119,10 @@ New confirmations additionally capture eligibility configuration, eligible suppl
 PDF export uses ReportLab 4.4.10 and bundled Noto Sans fonts under the SIL Open Font License (backend/assets/fonts/OFL.txt). Tables repeat their headings across pages; long notes wrap and paginate. Confirmation times display in UTC consistently. Latin, Greek and Cyrillic text are supported by these fonts. If other characters cannot be represented, export returns a readable error instead of silently producing incorrect names; the browser report remains available. Downloaded PDFs can be printed using a PDF viewer.
 
 Install updated dependencies with the backend virtual environment using python -m pip install -r requirements-lock.txt, then restart the backend to load report routes. Tests cover recommended/alternative/deferred reports, PDF text matching, escaped markup, Cyrillic text, missing historical details, long-table pagination, unsupported-character handling, project isolation, failed-download recovery and version navigation. The isolated cloud decision test verifies that saved reports remain identical after supplier edits and decision revisions.
+
+
+## Integration verification (SDSS-017, partial)
+
+The manual journey has an isolated cloud acceptance test: test_manual_journey.py. It creates its own schema, applies migrations twice, creates a synthetic project and three suppliers, requires weight approval, checks pending eligibility, passes two suppliers and fails one, rejects an incomplete matrix, calculates TOPSIS, runs a sensitivity scenario without changing the baseline, confirms a human decision and downloads its PDF. It then changes an eligibility review and verifies stale ranking/decision warnings while the saved report remains unchanged. A cross-project report request is rejected. The schema is removed in a finally block; the user's demonstration project is not edited.
+
+Component browser tests cover the individual pages with mocked APIs; they are not a full browser journey against Neon. This verification does not complete SDSS-017: AHP, AI weighting, file uploads, broader accessibility/viewport review and recovery/deployment checks remain. See docs/manual-workflow-verification.md for the current acceptance record and release gaps.
