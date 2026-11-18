@@ -206,3 +206,6 @@ Review every copied value before saving. A reset restores the blank current draf
 ## Narrow-screen layouts
 
 Dashboard and Purchasing Projects remain reachable in the phone navigation. Wide tables scroll inside named regions: swipe horizontally, or focus the region with Tab and use arrow keys. Project and criteria forms stack, action groups wrap, and supplier review dialogs remain vertically scrollable. Viewport checks cover 375 px phone and 768 px tablet widths, plus existing desktop page tests. Physical-device/mobile-browser and comprehensive accessibility checks remain outstanding.
+
+
+Latest complete regression checkpoint (2026-11-18): 67 backend tests passed with all opt-in cloud integrations enabled, and 20 browser tests passed. The cloud suite uses isolated schemas and synthetic AI responses; browser page tests mock APIs. See docs/release-1-checklist.md and docs/manual-workflow-verification.md for scope, user acceptance and outstanding release work.

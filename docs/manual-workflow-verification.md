@@ -104,3 +104,17 @@ Browser viewport checks at 375 and 768 pixels verify document width, Dashboard/p
 Screenshots 800–801 show navigation, wrapped filters, table scrolling and vertically stacked form fields in a snapped narrow Chrome window. The user checked the form footer and cancelled without creating a project. The user reported pushing this checkpoint.
 
 The user stopped the backend while keeping the frontend running. Screenshot 803 shows the unavailable state hiding totals and offering Try again, but the general fallback incorrectly asked the user to check entries. After restarting Uvicorn and retrying, screenshot 805 shows both projects restored as Approved, with zero Deferred / Needs review. The API helper now distinguishes transport failure, timeout, missing-detail server errors and unreadable success responses from validation errors. No saved records were changed by this outage test.
+
+
+## Save-recovery user acceptance - 2026-11-18
+
+PRJ-000003 (Save Recovery — Test) was created before the first backend shutdown. A later new-form failure preserved its visible values; the existing project was checked before retrying creation to avoid a duplicate. The user then edited the existing project's description with the backend stopped. Screenshot 810 shows the server-unavailable error and retained editing form. After restarting the backend, retrying Save Changes and refreshing, screenshot 812 retains Failed-save recovery check. The user explicitly confirmed the screenshot followed refresh. This verifies failed-update preservation, successful retry and persisted retrieval. The two approved projects remain separate.
+
+
+## Complete regression checkpoint - 2026-11-18
+
+With SDSS_RUN_DATABASE_TESTS=1, the entire backend suite passed: 67 tests, no skips, in 754.95 seconds. This includes nine opt-in cloud tests using temporary schemas, with cleanup in finally blocks. The suite covers migrations through version 13, project/supplier persistence and conflicts, manual/AHP/AI weighting, eligibility, evidence, matrix recovery, TOPSIS, sensitivity persistence, decisions and historical reports. AI-provider calls in the cloud suite use a deterministic synthetic stub; this is not a new live-provider verification. One Starlette/httpx deprecation warning remains in test infrastructure.
+
+The complete browser suite passed 20 tests with two workers in 58.1 seconds, including smaller-screen layouts and backend-outage messages. Browser page API responses are mocked; cloud tests exercise actual FastAPI handlers via TestClient and isolated PostgreSQL storage. These complementary checks are not an uninterrupted browser-to-live-database automation. No approved demonstration project was edited by these automated tests.
+
+See release-1-checklist.md for completed areas and remaining gaps. This checkpoint does not mark the entire project or SDSS-017 complete.
