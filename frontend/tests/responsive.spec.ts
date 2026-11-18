@@ -1,0 +1,40 @@
+import {test,expect} from '@playwright/test';
+import report from './report-fixture.json' with {type:'json'};
+for(const width of [375,768])test(`navigation, forms, tables and review dialog fit ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const project={id:'p1',reference:'PRJ-T',name:'Synthetic purchasing project with a long descriptive name',currency:'USD',category:'IT & Hardware',estimated_budget:null,target_date:null,description:'Synthetic demonstration',status:'Draft',workflow_status:'Approved',workflow_stage:'Decision',supplier_count:3,updated_at:'2026-11-18T10:00:00Z',last_activity_at:'2026-11-18T10:00:00Z',decision_id:'d1',resume_path:'/projects/p1/decision'};
+ const criteria=[{id:'price',name:'Price / Total Purchasing Cost',unit:'USD',direction:'cost',selected:true,minimum:'0',maximum:null},{id:'quality',name:'Product or Service Quality',unit:'points / 100',direction:'benefit',selected:true,minimum:'0',maximum:'100'}];
+ const supplier={id:'s1',name:'Synthetic Supplier A',updated_at:project.updated_at,checks:{cert:{status:'pending',notes:''}},total_price:null,price_status:'pending',eligibility:'pending',revision:0,evidence_revision:0,needs_review:false,reviewer:null,reviewed_at:null};
+ await page.route('**/api/projects**',async route=>{
+ const url=new URL(route.request().url()),path=url.pathname;
+ if(path==='/api/projects')return route.fulfill({json:[project]});
+ if(path.endsWith('/history'))return route.fulfill({json:{versions:[]}});
+ if(path.endsWith('/weights/manual'))return route.fulfill({json:{criteria,criteria_revision:1,weights:{price:'50',quality:'50'},revision:1,approved:false,needs_review:false}});
+ if(path.endsWith('/weights/ahp'))return route.fulfill({json:{criteria,criteria_revision:1,judgments:{'price:quality':'1'},revision:1,weight_revision:1,approved:false,active_method:'manual',needs_review:false,result:null}});
+ if(path.endsWith('/weights/ai'))return route.fulfill({json:{criteria,criteria_revision:1,context:{category:'IT',criteria},revision:1,weight_revision:1,weights:{price:'50',quality:'50'},notes:'',approved:false,needs_review:false,active_method:'manual',configured:true,suggestion:{id:'suggestion',provider:'Cloudflare Workers AI',model:'synthetic-model',priorities:'Synthetic priorities',summary:'Synthetic suggestion',input_context:{category:'IT',criteria},weights:{price:'50',quality:'50'},rationales:{price:'Control cost',quality:'Maintain quality'}}}});
+ if(path.endsWith('/criteria'))return route.fulfill({json:{revision:1,currency:'USD',configuration:{criteria,mandatory_checks:[{id:'cert',name:'Demonstration certificate',requirement:'Synthetic documentation must be reviewed'}],maximum_price:null}}});
+ if(path.endsWith('/matrix'))return route.fulfill({json:{entries:{s1:{price:'100',quality:'90'},s2:{price:'110',quality:'85'}},suppliers:[{id:'s1',name:'Synthetic Supplier A'},{id:'s2',name:'Synthetic Supplier B'}],criteria,context:'x'.repeat(64),revision:1,needs_review:false,ready:true}});
+ if(path.endsWith('/eligibility'))return route.fulfill({json:{suppliers:[supplier],mandatory_checks:[{id:'cert',name:'Demonstration certificate',requirement:'Synthetic documentation must be reviewed'}],maximum_price:'110',currency:'USD',criteria_revision:1,eligible_count:0,ready:false}});
+ if(path.endsWith('/evidence'))return route.fulfill({json:{files:[],evidence_revision:0,limits:{used_bytes:0,max_bytes:20971520,file_max_bytes:2097152,active_limit:10,stored_files:0,stored_file_limit:100}}});
+ if(path.endsWith('/report'))return route.fulfill({json:report});
+ return route.fulfill({json:project});
+ });
+ async function fits(){expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);}
+ await page.goto('/#/dashboard');await expect(page.getByRole('heading',{name:'Recent project activity'})).toBeVisible();await fits();
+ await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Purchasing Projects',exact:true}).click();await expect(page.getByRole('heading',{name:'Purchasing Projects',exact:true})).toBeVisible();await fits();
+ await page.getByRole('navigation').getByRole('button',{name:'Dashboard',exact:true}).click();await expect(page).toHaveURL(/dashboard/);
+ await page.goto('/#/new');await page.getByLabel('Project Name').fill('Small screen project');await fits();
+ await page.goto('/#/projects/p1/criteria');await expect(page.getByRole('button',{name:'Configure Product or Service Quality',exact:true})).toBeAttached();await fits();
+ const criterionTable=page.getByRole('region',{name:'Scoring criteria table'});await criterionTable.focus();await page.keyboard.press('End');await page.getByRole('button',{name:'Configure Product or Service Quality',exact:true}).click();await expect(page.getByLabel('Criterion Name')).toHaveValue('Product or Service Quality');await fits();
+ await page.goto('/#/projects/p1/weights/manual');await expect(page.getByLabel('Weight for Price / Total Purchasing Cost')).toHaveValue('50');await fits();
+ await page.goto('/#/projects/p1/weights/ahp');await expect(page.getByLabel('Price / Total Purchasing Cost compared with Product or Service Quality')).toHaveValue('1');await fits();
+ await page.goto('/#/projects/p1/weights/ai');await expect(page.getByLabel('AI weight for Price / Total Purchasing Cost')).toHaveValue('50');await fits();
+ await page.goto('/#/projects/p1/matrix');await expect(page.getByLabel('Synthetic Supplier A: Price / Total Purchasing Cost')).toHaveValue('100');await fits();
+ const matrix=page.getByRole('region',{name:'Evaluation matrix table'});await matrix.focus();await page.keyboard.press('ArrowRight');await expect.poll(()=>matrix.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+ await page.screenshot({path:`test-results/matrix-${width}.png`,fullPage:true});
+ await page.goto('/#/projects/p1/eligibility');await page.getByRole('button',{name:'Review Synthetic Supplier A',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await fits();
+ await page.getByLabel('Review notes for Demonstration certificate').fill('Synthetic review on a small screen');await page.getByRole('button',{name:'Cancel',exact:true}).scrollIntoViewIfNeeded();
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'Cancel',exact:true}).click();await expect(page.getByRole('dialog')).not.toBeVisible();
+ await page.goto('/#/projects/p1/reports/d1');await expect(page.getByRole('heading',{name:report.project.name})).toBeVisible();await fits();
+ await page.screenshot({path:`test-results/report-${width}.png`,fullPage:true});
+});

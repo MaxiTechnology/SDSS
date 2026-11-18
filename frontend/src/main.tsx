@@ -175,7 +175,7 @@ function App() {
           </div>
         </div>
         <p className="suite">PROCUREMENT SUITE</p>
-        <nav>
+        <nav aria-label="Main navigation">
           {[
             "Dashboard",
             "Purchasing Projects",
@@ -186,6 +186,7 @@ function App() {
             "Settings",
           ].map((v, i) => (
             <button
+              aria-current={(i===0&&dashboardView)||(i===1&&!dashboardView)?"page":undefined}
               key={v}
               disabled={i !== 1 && i !== 0}
               title={i !== 1 && i !== 0 ? "Available in a later update" : undefined}
@@ -452,7 +453,7 @@ function App() {
                 <label className="project-status-filter">Status<select aria-label="Filter projects by status" value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1);}}><option value="All">All ({items.length})</option>{WORKFLOW_STATUSES.map(status=><option key={status} value={status}>{status} ({items.filter(p=>(p.workflow_status||p.status)===status).length})</option>)}</select></label><button className="secondary" onClick={()=>{setSearch("");setStatusFilter("All");setPage(1);}}>Clear filters</button><button className="secondary" onClick={()=>void load()}>Refresh projects</button>
               </div>
               <section className="table-card">
-                <div className="table-scroll">
+                <div className="table-scroll" role="region" aria-label="Purchasing projects table" tabIndex={0}>
                   <table>
                     <thead>
                       <tr>

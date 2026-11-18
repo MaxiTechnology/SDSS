@@ -201,3 +201,8 @@ Saved tests are listed only for their exact baseline. Changed evaluation inputs 
 Migration 13 records currency and criterion definitions alongside newly saved matrices. When reviews, weights or eligible suppliers change, an outdated matrix still requires a fresh save and calculation. Recover Previous Values explicitly copies compatible old cells into the current draft: the supplier must still be eligible, currency must match, and criterion ID, name, unit and preference must be unchanged. Current bounds and mandatory reviewed-price rules are checked; invalid cells and new suppliers/criteria remain blank. Recovering never writes a matrix or calculates rankings.
 
 Review every copied value before saving. A reset restores the blank current draft until a fresh save succeeds. Existing optimistic revision and context checks still reject concurrent changes. For pre-migration matrices, recovery can use a ranking snapshot only when it belongs to that exact stored matrix context and revision. If no trustworthy basis is recorded, recovery is unavailable; current definitions are never assumed to describe old values. Historical decisions and ranking snapshots remain unchanged.
+
+
+## Narrow-screen layouts
+
+Dashboard and Purchasing Projects remain reachable in the phone navigation. Wide tables scroll inside named regions: swipe horizontally, or focus the region with Tab and use arrow keys. Project and criteria forms stack, action groups wrap, and supplier review dialogs remain vertically scrollable. Viewport checks cover 375 px phone and 768 px tablet widths, plus existing desktop page tests. Physical-device/mobile-browser and comprehensive accessibility checks remain outstanding.

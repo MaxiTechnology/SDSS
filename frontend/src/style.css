@@ -674,3 +674,35 @@ dialog::backdrop { background:#0006; }
 
 .matrix-recovery.info { display: block; }
 .matrix-recovery .secondary { white-space: nowrap; }
+
+/* Keep wide data inside keyboard-accessible scroll regions. */
+.workspace, .criteria-grid > *, .fields > *, .toolbar > * { min-width: 0; }
+.table-scroll { max-width: 100%; min-width: 0; overscroll-behavior-x: contain; }
+.table-scroll:focus-visible { outline: 3px solid #779eff; outline-offset: 2px; }
+.table-scroll input[type=number] { min-width: 120px; }
+.table-scroll select { min-width: 220px; }
+.criteria-grid { grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); }
+.supplier-page > p, .supplier-page article, h1, h2, h3, h4 { overflow-wrap: anywhere; }
+aside { overflow-y: auto; }
+@media(max-width:900px) { .criteria-grid { grid-template-columns: minmax(0,1fr); } }
+@media(max-width:700px) {
+  nav { display: flex; flex-wrap: wrap; gap: 8px; }
+  nav button:not(:disabled) { display: flex; min-height: 44px; flex: 1; justify-content: center; white-space: normal; }
+  .list-heading, .card-heading, footer, .dialog-footer { flex-wrap: wrap; gap: 12px; }
+  .list-heading > *, .card-heading > * { min-width: 0; }
+  .list-heading > .primary { flex-shrink: 0; }
+  .primary, .secondary, .open-project, .pagination button { min-height: 44px; }
+  th, td { padding: 12px; }
+  .pagination { flex-wrap: wrap; gap: 12px; padding: 16px; }
+  .criteria-range { grid-template-columns: minmax(0,1fr); }
+  .dashboard-cards { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .dashboard-cards > button, .dashboard-cards > div { padding: 16px; }
+  .project-status-filter { flex-wrap: wrap; }
+  .project-status-filter select { max-width: 100%; }
+  .dialog-heading, .dialog-footer, .dialog-body, .eligibility-page .review-form { padding: 16px; }
+  .dialog-heading h2 { min-width: 0; overflow-wrap: anywhere; }
+  dialog button, .decision-report button { max-width: 100%; overflow-wrap: anywhere; }
+  .evidence-files ul { padding-left: 20px; }
+}
+
+.project-form p, .project-form li, .project-form summary { overflow-wrap: anywhere; }

@@ -86,3 +86,14 @@ Recover Previous Values is an explicit draft action. It filters to current eligi
 
 
 Matrix recovery checks: 58 backend tests passed with nine opt-in skips; two targeted browser checks passed, including blank-to-recovered draft, new supplier blanks, disabled calculation, failed-save preservation and reopening after successful save. The isolated cloud matrix journey passed with explicit recovery, exact-version legacy snapshot fallback, blocked calculation before save, idempotent fresh save, and unchanged historical ranking content. Production build passed. Migration 13 only adds matrix input metadata; existing project inputs and decisions are preserved.
+
+
+## Matrix recovery user acceptance - 2026-11-18
+
+After a review-note edit on PRJ-000002, screenshot 793 offered ten compatible old cells. The user recovered the values, saved and recalculated, then confirmed Demo Supplier A as decision version 4 without a stale warning (screenshot 794). The user subsequently reported pushing the checkpoint and completing the Git status check.
+
+## Smaller-screen implementation checks - 2026-11-18
+
+Phone navigation now exposes both Dashboard and Purchasing Projects. Wide tables have named, focusable scroll regions instead of overflowing the whole page, including criteria, manual/AHP/AI weights, ranking comparisons and saved reports. Narrow forms, action groups, dialogs and pagination wrap; controls receive larger touch targets. Desktop sidebar remains available and scrollable.
+
+Browser viewport checks at 375 and 768 pixels verify document width, Dashboard/project navigation, project entry, criteria configuration, manual/AHP/AI weighting, matrix entry and keyboard horizontal scrolling, review-dialog note entry/cancellation, and report layout. All 19 browser tests passed across the suite and targeted rerun; one project-reload test timed out in the parallel run and passed separately. Screenshots of phone matrix/report were visually inspected. Production build passed. These use mocked APIs in desktop Chrome viewport emulation, not physical-device Safari or a full accessibility audit. User acceptance and broader SDSS-017 recovery/end-to-end checks remain pending.
