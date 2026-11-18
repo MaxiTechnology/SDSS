@@ -1,8 +1,12 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 
+test.describe.configure({mode:'serial'});
+let projectPath='',manualReportURL='',ahpReportURL='';
+function reportApi(url:string){const parts=new URL(url).hash.slice(1).split('/');return `/api/projects/${parts[2]}/decisions/${parts[4]}/report`;}
+
 test('real browser journey: setup, evidence, price eligibility, matrix, scenario, decision and PDF',async({page,request})=>{
- const isolation=await request.get('/api/test-isolation');expect(await isolation.json()).toEqual({schema:process.env.SDSS_BROWSER_TEST_SCHEMA});
+ const isolation=await request.get('/api/test-isolation');expect(await isolation.json()).toEqual({schema:process.env.SDSS_BROWSER_TEST_SCHEMA,ai_mode:'synthetic-provider-fixture',ai_calls:0});
  const empty=await request.get('/api/projects');expect(await empty.json()).toEqual([]);
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('/#/new');
@@ -15,6 +19,7 @@ test('real browser journey: setup, evidence, price eligibility, matrix, scenario
  await expect(page.getByRole('heading',{name:'Purchasing Project Details',exact:true})).toBeVisible();
  await expect(page.getByLabel('Project Name')).toBeDisabled();
  await page.reload();await expect(page.getByLabel('Project Name')).toHaveValue('Browser Journey — Synthetic');
+ projectPath=new URL(page.url()).hash.slice(1);
  console.log('Saved project reopened from isolated cloud storage.');
  await page.getByRole('button',{name:'Continue to Add Suppliers',exact:false}).click();
  for(const name of ['Browser Supplier A','Browser Supplier B','Browser Supplier C']){
@@ -78,6 +83,7 @@ test('real browser journey: setup, evidence, price eligibility, matrix, scenario
  await expect(page.getByText('Recommended supplier approved — version 1',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'View Decision Report',exact:true}).click();
  await expect(page.getByText('Selected supplier: Browser Supplier A',{exact:true})).toBeVisible();
+ manualReportURL=page.url();
  await expect(page.getByText('Mandatory maximum price: 110',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Download saved evidence: synthetic-A.txt',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Download saved evidence: synthetic-C.txt',exact:true})).toBeVisible();
@@ -96,4 +102,117 @@ test('real browser journey: setup, evidence, price eligibility, matrix, scenario
  await page.getByRole('button',{name:'Saved Report',exact:true}).click();
  await expect(page.getByText('Selected supplier: Browser Supplier A',{exact:true})).toBeVisible();
  expect(errors).toEqual([]);
+});
+
+async function recalculateAndRevise(page:any,version:number,reason:string){
+ await page.getByRole('button',{name:'Continue to Eligibility Review',exact:false}).click();
+ await page.getByRole('button',{name:'Continue to Evaluation Matrix',exact:false}).click();
+ await expect(page.getByRole('button',{name:'Calculate Rankings',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'Recover Previous Values',exact:true}).click();
+ await expect(page.getByLabel('Browser Supplier A: Price / Total Purchasing Cost',{exact:true})).toHaveValue('100');
+ await page.getByRole('button',{name:'Save Matrix Draft',exact:true}).click();
+ await expect(page.getByText('Matrix saved. All required values are provided.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Calculate Rankings',exact:true}).click();
+ await expect(page.locator('tbody tr').first()).toContainText('Browser Supplier A');
+ await page.getByRole('button',{name:'Continue to Final Decision',exact:false}).click();
+ await page.getByRole('button',{name:'Create a decision revision',exact:true}).click();
+ await page.getByLabel('Revision reason',{exact:true}).fill(reason);
+ await page.getByLabel('Decision reason',{exact:true}).fill('Synthetic browser verification of the approved weighting method.');
+ await page.getByLabel('I have reviewed the ranking and confirm this purchasing decision.').check();
+ await page.getByRole('button',{name:'Confirm Decision',exact:true}).click();
+ await expect(page.getByText(`Recommended supplier approved — version ${version}`,{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'View Decision Report',exact:true}).click();
+ await expect(page.getByText('Selected supplier: Browser Supplier A',{exact:true})).toBeVisible();
+}
+
+async function pdf(page:any,path:string){
+ const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download PDF',exact:true}).click();
+ await (await download).saveAs(path);expect((await readFile(path)).subarray(0,5).toString()).toBe('%PDF-');
+}
+
+test('real AHP journey: inconsistent comparisons blocked, approval, recovery, revised decision and PDF',async({page,request})=>{
+ const manualBefore=await (await request.get(reportApi(manualReportURL))).json();
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/#'+projectPath+'/weights/manual');
+ await page.getByRole('button',{name:'Use AHP Pairwise Weighting',exact:true}).click();
+ const comparisons=page.getByRole('region',{name:'AHP comparisons table'}).first().locator('select');
+ await expect(comparisons).toHaveCount(10);
+ for(const select of await comparisons.all())await select.selectOption('1');
+ await page.getByLabel('Price / Total Purchasing Cost compared with Product or Service Quality',{exact:true}).selectOption('9');
+ await page.getByLabel('Price / Total Purchasing Cost compared with Delivery Time',{exact:true}).selectOption('1/9');
+ await page.getByLabel('Product or Service Quality compared with Delivery Time',{exact:true}).selectOption('9');
+ await page.getByRole('button',{name:'Calculate AHP Weights',exact:true}).click();
+ await expect(page.getByText('Above 0.10.',{exact:false})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Approve AHP Weights',exact:true})).toBeDisabled();
+ const criteria=['Price / Total Purchasing Cost','Product or Service Quality','Delivery Time','Supplier Reliability','Warranty'];
+ const importance=[4,2,2,1,1];
+ for(let i=0;i<criteria.length;i++)for(let j=i+1;j<criteria.length;j++)await page.getByLabel(`${criteria[i]} compared with ${criteria[j]}`,{exact:true}).selectOption(String(importance[i]/importance[j]));
+ await page.getByRole('button',{name:'Calculate AHP Weights',exact:true}).click();
+ await expect(page.getByText('Within the 0.10 limit.',{exact:false})).toBeVisible();
+ await page.getByLabel('I reviewed the comparisons and weights and approve their use.').check();
+ await page.getByRole('button',{name:'Approve AHP Weights',exact:true}).click();
+ await expect(page.getByText('AHP weights are approved.',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByText('AHP weights are approved.',{exact:true})).toBeVisible();
+ console.log('AHP inconsistent judgments blocked; consistent weights approved and reopened.');
+ await recalculateAndRevise(page,2,'Approved AHP comparisons and recalculated.');
+ await expect(page.getByText('AHP pairwise weighting (approved)',{exact:true})).toBeVisible();
+ await expect(page.getByText('AHP consistency: CR 0.000000',{exact:false})).toBeVisible();
+ ahpReportURL=page.url();await pdf(page,'test-results/live-ahp-report.pdf');
+ await page.reload();await expect(page.getByText('AHP pairwise weighting (approved)',{exact:true})).toBeVisible();
+ expect(await (await request.get(reportApi(manualReportURL))).json()).toEqual(manualBefore);
+ await page.screenshot({path:'test-results/live-ahp-report.png',fullPage:true});
+ expect(errors).toEqual([]);
+ console.log('AHP decision version 2 and PDF saved; manual report preserved.');
+});
+
+test('real AI workflow with synthetic provider: consent, outage retry, adjustment, approval and PDF provenance',async({page,request})=>{
+ const api='/api'+projectPath;
+ const ahpBefore=await (await request.get(reportApi(ahpReportURL))).json();
+ const manualBefore=await (await request.get(reportApi(manualReportURL))).json();
+ const activeBefore=await (await request.get(api+'/weights/manual')).json();
+ const rankingBefore=await (await request.get(api+'/rankings')).json();
+ expect(activeBefore.method).toBe('ahp');expect(rankingBefore.stale).toBe(false);
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/#'+projectPath+'/weights/ahp');
+ await page.getByRole('button',{name:'Use AI Weight Suggestions',exact:true}).click();
+ await page.getByLabel('Purchasing priorities',{exact:true}).fill('Synthetic priorities: favor price while retaining quality and delivery.');
+ await expect(page.getByRole('button',{name:'Request AI Suggestion',exact:true})).toBeDisabled();
+ expect((await (await request.get('/api/test-isolation')).json()).ai_calls).toBe(0);
+ await page.getByLabel('I agree to send the listed context and my priority notes to Cloudflare for a suggestion.').check();
+ await page.getByRole('button',{name:'Request AI Suggestion',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Synthetic provider outage');
+ await expect(page.getByLabel('Purchasing priorities',{exact:true})).toHaveValue('Synthetic priorities: favor price while retaining quality and delivery.');
+ await page.getByRole('button',{name:'Request AI Suggestion',exact:true}).click();
+ await expect(page.getByLabel('AI weight for Price / Total Purchasing Cost',{exact:true})).toHaveValue('40.00');
+ expect((await (await request.get('/api/test-isolation')).json()).ai_calls).toBe(2);
+ const activeAfter=await (await request.get(api+'/weights/manual')).json();
+ expect(activeAfter.method).toBe('ahp');expect(activeAfter.weights).toEqual(activeBefore.weights);
+ expect(await (await request.get(api+'/rankings')).json()).toEqual(rankingBefore);
+ await page.getByLabel('AI weight for Price / Total Purchasing Cost',{exact:true}).fill('45');
+ await page.getByLabel('I reviewed the AI explanations and these weights and approve their use.').check();
+ await expect(page.getByText('Total Weight: 105.00%',{exact:false})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Approve AI Weights',exact:true})).toBeDisabled();
+ await page.getByLabel('AI weight for Product or Service Quality',{exact:true}).fill('25');
+ await page.getByLabel('AI review notes',{exact:true}).fill('Human reviewer adjusted the synthetic suggestion after review.');
+ await page.getByLabel('I reviewed the AI explanations and these weights and approve their use.').check();
+ await page.getByRole('button',{name:'Approve AI Weights',exact:true}).click();
+ await expect(page.getByText('AI-assisted weights are approved.',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByLabel('AI weight for Price / Total Purchasing Cost',{exact:true})).toHaveValue('45.00');
+ await expect(page.getByText('AI-assisted weights are approved.',{exact:true})).toBeVisible();
+ console.log('AI consent, provider failure/retry and human-adjusted approval persisted without changing weights during generation.');
+ await recalculateAndRevise(page,3,'Approved reviewed synthetic AI weights and recalculated.');
+ await expect(page.getByText('AI-assisted weighting (approved)',{exact:true})).toBeVisible();
+ await expect(page.getByText('synthetic-browser-fixture',{exact:false})).toBeVisible();
+ await expect(page.getByText('Original AI weight: 40.00% · Approved weight: 45.00%',{exact:true})).toBeVisible();
+ await pdf(page,'test-results/live-ai-report.pdf');
+ await page.reload();await expect(page.getByText('AI-assisted weighting (approved)',{exact:true})).toBeVisible();
+ expect(await (await request.get(reportApi(ahpReportURL))).json()).toEqual(ahpBefore);
+ expect(await (await request.get(reportApi(manualReportURL))).json()).toEqual(manualBefore);
+ await page.getByRole('navigation',{name:'Main navigation'}).getByRole('button',{name:'Dashboard',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Approved 1',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Saved Report',exact:true}).click();
+ await expect(page.getByText('AI-assisted weighting (approved)',{exact:true})).toBeVisible();
+ await page.screenshot({path:'test-results/live-ai-report.png',fullPage:true});
+ expect(errors).toEqual([]);
+ console.log('AI decision version 3 and PDF preserved original/applied weights; earlier reports unchanged.');
 });

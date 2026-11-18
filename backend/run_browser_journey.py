@@ -26,9 +26,25 @@ def serve(schema):
         return connection
     # Missing test tables must fail; public is deliberately absent from search_path.
     database.connect=isolated
+    # Substitute only the provider boundary, inside this isolated test process.
+    # Parsing, consent, persistence and approval still run through the real API.
+    import json,cloudflare_ai
+    fixture={'calls':0}
+    cloudflare_ai.settings=lambda:{'synthetic_browser_fixture':True}
+    cloudflare_ai.MODEL='synthetic-browser-fixture'
+    def generate(settings,messages,*,max_tokens):
+        fixture['calls']+=1
+        if fixture['calls']==1:
+            raise cloudflare_ai.AIConnectionError('Synthetic provider outage. Your saved work was kept. Try again.')
+        incoming=json.loads(messages[-1]['content'])
+        ids={c['id'] for c in incoming['context']['criteria']}
+        weights={'price':'40.00','quality':'30.00','delivery':'15.00','reliability':'10.00','warranty':'5.00'}
+        if ids!=set(weights):raise RuntimeError('Unexpected synthetic AI test criteria')
+        return json.dumps({'weights':weights,'rationales':{cid:'Synthetic rationale for '+cid for cid in weights},'summary':'Synthetic advisory suggestion for browser verification.'})
+    cloudflare_ai.generate=generate
     from app import app
     @app.get('/api/test-isolation')
-    def isolation():return {'schema':schema}
+    def isolation():return {'schema':schema,'ai_mode':'synthetic-provider-fixture','ai_calls':fixture['calls']}
     import uvicorn
     uvicorn.run(app,host='127.0.0.1',port=BACKEND_PORT,log_level='warning')
 
@@ -61,7 +77,7 @@ def run():
                 try:
                     import json
                     with urlopen(f'http://127.0.0.1:{BACKEND_PORT}/api/test-isolation',timeout=1) as response:
-                        if json.load(response)=={'schema':schema}:break
+                        if json.load(response).get('schema')==schema:break
                 except OSError:pass
                 time.sleep(.2)
             else:raise RuntimeError('Test backend did not become ready.')
@@ -72,7 +88,7 @@ def run():
                 if vite.poll() is not None:raise RuntimeError('Test frontend failed to start; existing services were not reused.')
                 try:
                     with urlopen('http://127.0.0.1:5174/api/test-isolation',timeout=1) as response:
-                        if json.load(response)=={'schema':schema}:break
+                        if json.load(response).get('schema')==schema:break
                 except OSError:pass
                 time.sleep(.2)
             else:raise RuntimeError('Test frontend did not become ready.')
@@ -81,9 +97,15 @@ def run():
             result=subprocess.run(command,cwd=ROOT/'frontend',env=env)
             if result.returncode==0:
                 from pypdf import PdfReader
-                text='\n'.join(page.extract_text() for page in PdfReader(output/'live-report.pdf').pages)
-                for expected in ('Browser Supplier A','Mandatory maximum price: 110','Browser cost emphasis','synthetic-A.txt','synthetic-C.txt'):
-                    if expected not in text:raise RuntimeError('Downloaded PDF did not contain the expected saved journey details.')
+                checks={
+                    'live-report.pdf':('Browser Supplier A','Mandatory maximum price: 110','Browser cost emphasis','synthetic-A.txt','synthetic-C.txt'),
+                    'live-ahp-report.pdf':('AHP pairwise weighting (approved)','AHP consistency','CR: 0.000000','Browser Supplier A'),
+                    'live-ai-report.pdf':('AI-assisted weighting (approved)','synthetic-browser-fixture','Synthetic rationale for price','Original AI weight: 40.00%','Approved weight: 45.00%'),
+                }
+                for filename,expected_values in checks.items():
+                    text='\n'.join(page.extract_text() for page in PdfReader(output/filename).pages)
+                    for expected in expected_values:
+                        if expected not in text:raise RuntimeError('Downloaded PDF did not contain the expected saved journey details.')
                 print('Verified real downloaded PDF contents.',flush=True)
             return result.returncode
     finally:

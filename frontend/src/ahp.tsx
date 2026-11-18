@@ -1,16 +1,17 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useState,useRef} from 'react';
 import {api} from './api';
 type Result={weights:Record<string,string>;cr:string;ci:string;ri:string;lambda_max:string;acceptable:boolean;matrix:string[][];method:string};
 type Version={revision:number;created_at:string;snapshot:{criteria:{id:string;name:string}[];judgments:Record<string,string|null>;approved:boolean;result:Result|null}};
 type Saved={criteria:{id:string;name:string}[];criteria_revision:number;judgments:Record<string,string|null>;revision:number;weight_revision:number;approved:boolean;needs_review:boolean;active_method:string|null;result:Result|null};
 export function AhpWeighting({projectId}:{projectId:string}){
  const base=`/api/projects/${projectId}/weights/ahp`;
+ const loadSequence=useRef(0),historySequence=useRef(0);
  const [history,setHistory]=useState<Version[]>([]),[historyError,setHistoryError]=useState('');
  const [saved,setSaved]=useState<Saved|null>(null),[judgments,setJudgments]=useState<Record<string,string|null>>({}),[result,setResult]=useState<Result|null>(null),[reviewed,setReviewed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const dirty=!!saved&&JSON.stringify(judgments)!==JSON.stringify(saved.judgments);
- async function load(){setBusy(true);setError('');try{const d=await api<Saved>(base);setSaved(d);setJudgments(d.judgments);setResult(d.result);setReviewed(d.approved);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- async function loadHistory(){setHistoryError('');try{const d=await api<{versions:Version[]}>(base+'/history');setHistory(d.versions||[]);}catch{setHistoryError('Could not load comparison history.');}}
- useEffect(()=>{void load();void loadHistory();},[projectId]);
+ async function load(){const sequence=++loadSequence.current;setBusy(true);setError('');try{const d=await api<Saved>(base);if(sequence!==loadSequence.current)return;setSaved(d);setJudgments(d.judgments);setResult(d.result);setReviewed(d.approved);}catch(e){if(sequence===loadSequence.current)setError((e as Error).message);}finally{if(sequence===loadSequence.current)setBusy(false);}}
+ async function loadHistory(){const sequence=++historySequence.current;setHistoryError('');try{const d=await api<{versions:Version[]}>(base+'/history');if(sequence===historySequence.current)setHistory(d.versions||[]);}catch{if(sequence===historySequence.current)setHistoryError('Could not load comparison history.');}}
+ useEffect(()=>{void load();void loadHistory();return()=>{loadSequence.current++;historySequence.current++;};},[projectId]);
  useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
  const body=(approved=false)=>({judgments,criteria_revision:saved!.criteria_revision,expected_revision:saved!.revision,expected_weight_revision:saved!.weight_revision,approved});
  async function calculate(){setBusy(true);setError('');try{setResult(await api<Result>(base+'/calculate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body())}));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
