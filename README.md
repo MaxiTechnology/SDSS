@@ -209,3 +209,19 @@ Dashboard and Purchasing Projects remain reachable in the phone navigation. Wide
 
 
 Latest complete regression checkpoint (2026-11-18): 67 backend tests passed with all opt-in cloud integrations enabled, and 20 browser tests passed. The cloud suite uses isolated schemas and synthetic AI responses; browser page tests mock APIs. See docs/release-1-checklist.md and docs/manual-workflow-verification.md for scope, user acceptance and outstanding release work.
+
+
+## Opt-in browser journey against cloud storage
+
+From the repository root in PowerShell, run:
+
+```powershell
+$env:SDSS_RUN_BROWSER_DATABASE_TESTS='1'
+backend/.venv/Scripts/python.exe backend/run_browser_journey.py
+```
+
+This runner creates a uniquely named sdss_browser_test_ schema using the configured database role, migrates it, and starts a separate backend at 127.0.0.1:8001 and frontend at 127.0.0.1:5174. Both ports must be free; it never reuses existing services or changes the normal 8000/5173 configuration. Each connection sets search_path to the isolated schema without public fallback. The test verifies the isolation identity and empty project list before entering data.
+
+All application writes go through the real Chrome UI without page.route mocks. The journey creates a project and three suppliers, configures a document check and maximum price, approves equal manual weights, uploads synthetic evidence, excludes the overpriced supplier, calculates TOPSIS, saves/reopens a sensitivity scenario, confirms a decision, downloads an evidence file and PDF, and reopens the saved report from Dashboard. The runner additionally extracts and checks the actual PDF.
+
+Services and the isolated schema are removed in finally cleanup after success or failure. Ignored test-results files contain synthetic traces, screenshots and downloads. An externally killed runner can bypass cleanup; inspect only its exact generated test schema/services before manual cleanup, never drop schemas using a broad pattern. AI provider calls are not part of this manual-weight journey. The normal demonstration projects are untouched.

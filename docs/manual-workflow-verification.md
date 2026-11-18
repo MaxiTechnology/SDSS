@@ -118,3 +118,14 @@ With SDSS_RUN_DATABASE_TESTS=1, the entire backend suite passed: 67 tests, no sk
 The complete browser suite passed 20 tests with two workers in 58.1 seconds, including smaller-screen layouts and backend-outage messages. Browser page API responses are mocked; cloud tests exercise actual FastAPI handlers via TestClient and isolated PostgreSQL storage. These complementary checks are not an uninterrupted browser-to-live-database automation. No approved demonstration project was edited by these automated tests.
 
 See release-1-checklist.md for completed areas and remaining gaps. This checkpoint does not mark the entire project or SDSS-017 complete.
+
+
+## Real browser-to-cloud journey - 2026-11-19
+
+Added an explicitly opted-in runner with separate local ports 8001/5174 and a generated isolated PostgreSQL schema. No normal API test mode or production settings were added. The browser verifies its isolation identity and empty project list before writing; all application writes then use the real UI and real backend, without response interception or seeded project data.
+
+The uninterrupted manual-weight journey passed in about 3.1 minutes: create/reopen project; add three suppliers; configure a document check and maximum price; approve equal weights; upload three synthetic files; verify below/above/exact-limit eligibility; exclude the overpriced supplier; save matrix and calculate ranking; save/reopen scenario; confirm human decision; download and compare actual evidence bytes; download PDF; refresh report; open the latest saved report from Dashboard. The runner extracted the actual PDF and checked decision, price rule, scenario and attachment text. All three PDF pages were rendered and visually inspected. No browser page errors were recorded.
+
+Initial test assertions were corrected to await the saved-project route rather than a transient disabled form, and to identify the specific approval message rather than both status elements. A direct Node runner replaced npm-managed server teardown to give Windows test-service cleanup explicit ownership. One interrupted initial-run schema was removed by its exact identifier after verifying its services had stopped. Normal failed and successful runs exercised finally cleanup. Final verification found zero remaining browser-test schemas and no listeners on the two test ports. Existing demonstration projects and ordinary 8000/5173 configuration were not edited.
+
+This completes an uninterrupted real-browser manual workflow check. Existing AHP/AI API journeys and user walkthroughs remain separate; they were not rerun as real-browser/cloud journeys here. Physical devices, additional browser engines, comprehensive accessibility and deployment recovery remain open; the whole project is not declared complete.
