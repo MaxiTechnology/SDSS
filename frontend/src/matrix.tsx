@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import {api} from './api';
-type Matrix={entries:Record<string,Record<string,string|null>>;suppliers:{id:string;name:string}[];criteria:{id:string;name:string;unit:string;direction:string;minimum:string|null;maximum:string|null}[];context:string;revision:number;needs_review:boolean;ready:boolean};
+type Matrix={entries:Record<string,Record<string,string|null>>;suppliers:{id:string;name:string}[];criteria:{id:string;name:string;unit:string;direction:string;minimum:string|null;maximum:string|null}[];context:string;revision:number;needs_review:boolean;ready:boolean;recovery?:{entries:Record<string,Record<string,string|null>>;count:number;available:boolean}|null};
 export function EvaluationMatrix({projectId}:{projectId:string}){
  const base=`/api/projects/${projectId}/matrix`;
  const [saved,setSaved]=useState<Matrix|null>(null),[entries,setEntries]=useState<Matrix['entries']>({}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -16,11 +16,11 @@ export function EvaluationMatrix({projectId}:{projectId:string}){
  return <section className="supplier-page"><h2>Supplier Evaluation Matrix</h2><p>Enter comparable values for each eligible supplier. Use the same unit in each column.</p>
  {error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="success">{notice}</p>}
  {!saved?<button className="secondary" disabled={busy} onClick={()=>void load()}>Reload Matrix</button>:<>
- {saved.needs_review&&<p className="info">Project inputs changed. Enter fresh values for the current suppliers and criteria.</p>}
+ {saved.needs_review&&<div className="info matrix-recovery"><p>Project inputs changed. Review and save a fresh matrix before calculating rankings.</p>{saved.recovery?.count?<><p>{saved.recovery.count} previous values match the current suppliers, criteria and currency. Values that no longer match or fail current rules are left blank.</p><button className="secondary" disabled={busy} onClick={()=>{if(!dirty||confirm('Replace unsaved entries with the recoverable previous values?')){setEntries(structuredClone(saved.recovery!.entries));setNotice('Previous values copied for review. Check every value, complete blank cells, then save the matrix before calculating.');}}}>Recover Previous Values</button></>:<p>No compatible previous values are available to recover. Enter fresh values for this evaluation.</p>}</div>}
  <fieldset disabled={busy}><div className="table-scroll"><table><thead><tr><th>Supplier</th>{saved.criteria.map(c=><th key={c.id}>{c.name}<br/><small>{c.unit} · {c.direction==='cost'?'Lower':'Higher'} is better</small></th>)}</tr></thead><tbody>{saved.suppliers.map(s=><tr key={s.id}><td><strong>{s.name}</strong></td>{saved.criteria.map(c=>{const value=entries[s.id]?.[c.id]??null;const message=cellError(value,c);return <td key={c.id}><input aria-label={`${s.name}: ${c.name}`} aria-invalid={!!message} type="number" step="any" min={c.minimum??undefined} max={c.maximum??undefined} value={value??''} onChange={e=>{setEntries({...entries,[s.id]:{...entries[s.id],[c.id]:e.target.value||null}});setNotice('');}}/>{message&&<small className="matrix-cell-error">{message}</small>}</td>;})}</tr>)}</tbody></table></div></fieldset>
- <p className="info">{saved.ready&&!dirty?'Saved matrix is complete.':'Save your entries to verify readiness.'} Save complete values before calculating rankings.</p>
+ <p className="info">{saved.ready&&!saved.needs_review&&!dirty?'Saved matrix is complete.':'Save your entries to verify readiness.'} Save complete values before calculating rankings.</p>
  <button className="secondary" disabled={busy} onClick={()=>{if(!dirty||confirm('Discard unsaved matrix entries and reload?'))void load();}}>Reset to Saved</button> <button className="primary" disabled={busy||!!invalid} onClick={()=>void save()}>{busy?'Saving…':'Save Matrix Draft'}</button>
- <button className="primary" disabled={busy||dirty||!saved.ready} onClick={()=>void calculate()}>Calculate Rankings</button>
+ <button className="primary" disabled={busy||dirty||saved.needs_review||!saved.ready} onClick={()=>void calculate()}>Calculate Rankings</button>
  </>}
  <button className="secondary" disabled={busy} onClick={leave}>← Back to Eligibility</button></section>;
 }

@@ -58,7 +58,7 @@ Screenshot 760 showed one project, one approved decision, three supplier entries
 
 ## Matrix review follow-up
 
-Saving a supplier review changes the review revision included in matrix context. A context mismatch currently presents an empty matrix and requires explicit resubmission before recalculation, even when the project has no mandatory checks. Prior saved decisions remain intact. Automatically reusing old numbers is not implemented: changes to units, currency or selected criteria must not silently reinterpret old inputs. This usability limitation was observed during the evidence walkthrough and remains a follow-up.
+Saving a supplier review changes the review revision included in matrix context. A context mismatch currently presents an empty matrix and requires explicit resubmission before recalculation, even when the project has no mandatory checks. Prior saved decisions remain intact. Automatically reusing old numbers is not implemented: changes to units, currency or selected criteria must not silently reinterpret old inputs. This usability limitation was observed during the evidence walkthrough. Explicit compatible-value recovery was subsequently implemented; see the verification below.
 
 
 ## Mandatory requirement user acceptance - 2026-11-18
@@ -74,3 +74,15 @@ Default backend suite: 57 passed, nine opt-in database skips. Three targeted bro
 ## Saved sensitivity user acceptance - 2026-11-18
 
 The user ran the laptop price-priority scenario with weights 90/3/3/2/2. MAXI TECHNOLOGY moved from third to first (0.800663), THE POOLS INVESTMENT remained second (0.614756), and APPLE CAFE moved from first to third (0.199337). The named scenario survived refresh. The user created a new decision revision while retaining the approved AI weighting and APPLE CAFE selection. Screenshot 784 shows the saved scenario name, weights, comparative ranks/scores, actor/timestamp and notes in the report; the user confirmed the same content in the downloaded PDF. This verifies one saved scenario and its report snapshot, not universal ranking stability.
+
+
+## Maximum price user acceptance - 2026-11-18
+
+The user enabled 110000 RUB as a mandatory maximum on PRJ-000002, reapproved equal weights and reviewed supplier documents/prices. Screenshot 789 shows A eligible below the limit (100000), B excluded above it (120000) despite its document passing, and C eligible at the exact limit (110000). Screenshot 790 confirms only A/C in the matrix. After recalculation and a decision revision, screenshot 791 records the maximum and eligible supplier reviews; the user confirmed the PDF. The laptop project was not edited by this test.
+
+## Matrix recovery implementation
+
+Recover Previous Values is an explicit draft action. It filters to current eligible supplier IDs and matching currency/criterion meaning, and clears cells violating current bounds or reviewed prices. Recovery does not save, mark a matrix ready, calculate rankings or alter a decision. New matrix saves record input definitions; legacy recovery uses only an exact matching saved ranking snapshot. User acceptance remains pending.
+
+
+Matrix recovery checks: 58 backend tests passed with nine opt-in skips; two targeted browser checks passed, including blank-to-recovered draft, new supplier blanks, disabled calculation, failed-save preservation and reopening after successful save. The isolated cloud matrix journey passed with explicit recovery, exact-version legacy snapshot fallback, blocked calculation before save, idempotent fresh save, and unchanged historical ranking content. Production build passed. Migration 13 only adds matrix input metadata; existing project inputs and decisions are preserved.

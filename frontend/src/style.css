@@ -671,3 +671,6 @@ dialog::backdrop { background:#0006; }
 .evidence-files {border-top:1px solid #dce2ed;margin-top:20px;padding-top:16px;}
 .evidence-files li {margin:12px 0;overflow-wrap:anywhere;}
 .evidence-files button {margin:5px;}
+
+.matrix-recovery.info { display: block; }
+.matrix-recovery .secondary { white-space: nowrap; }

@@ -216,6 +216,12 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (12)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 13").fetchone():
+            connection.execute("""
+                ALTER TABLE project_matrix ADD COLUMN input_basis jsonb;
+                INSERT INTO sdss_migrations(version) VALUES (13)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

@@ -532,13 +532,34 @@ def matrix_errors(entries, suppliers, criteria, maximum_price):
     return errors
 
 
+def matrix_recovery(row, criteria, suppliers, selected):
+    """Offer old values as an explicit draft, never as a current saved matrix."""
+    blank={s['id']:{c['id']:None for c in selected} for s in suppliers}
+    basis=row.get('input_basis') if row else None
+    if not basis or basis.get('currency')!=criteria['currency']:
+        return {'entries':blank,'count':0,'available':False}
+    previous={c['id']:c for c in basis['criteria']}
+    entries={sid:dict(values) for sid,values in blank.items()}
+    for supplier in suppliers:
+        for criterion in selected:
+            cid=criterion['id'];old=previous.get(cid)
+            if old and all(old.get(k)==criterion.get(k) for k in ('name','unit','direction')):
+                entries[supplier['id']][cid]=row['entries'].get(supplier['id'],{}).get(cid)
+    errors=matrix_errors(entries,suppliers,selected,criteria['configuration']['maximum_price'])
+    for sid,cells in errors.items():
+        for cid in cells:entries[sid][cid]=None
+    count=sum(value is not None for values in entries.values() for value in values.values())
+    return {'entries':entries,'count':count,'available':True}
+
+
 def matrix_json(row, criteria, suppliers, selected, context):
     current = bool(row and row['context'] == context)
     entries = row['entries'] if current else {s['id']:{c['id']:None for c in selected} for s in suppliers}
     errors = matrix_errors(entries,suppliers,selected,criteria['configuration']['maximum_price'])
     return {'entries':entries,'suppliers':[{'id':s['id'],'name':s['name']} for s in suppliers], 'criteria':selected,
             'context':context,'revision':row['revision'] if row else 0,'needs_review':bool(row and not current),
-            'errors':errors,'ready':not errors}
+            'errors':errors,'ready':current and not errors,
+            'recovery':matrix_recovery(row,criteria,suppliers,selected) if row and not current else None}
 
 
 @app.get('/api/projects/{project_id}/matrix')
@@ -546,6 +567,12 @@ def get_matrix(project_id: UUID):
     with database.connect() as connection:
         criteria,suppliers,selected,context = matrix_context(connection,project_id)
         row = connection.execute('SELECT * FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
+        # Legacy matrices have no recorded basis. Use only a ranking snapshot of
+        # this exact saved matrix version, never today's criteria as a guess.
+        if row and row['context']!=context and not row.get('input_basis'):
+            legacy=connection.execute('SELECT snapshot FROM ranking_runs WHERE project_id=%s AND context=%s AND matrix_revision=%s LIMIT 1',(project_id,row['context'],row['revision'])).fetchone()
+            if legacy:
+                row={**row,'input_basis':{'currency':legacy['snapshot'].get('currency'),'criteria':legacy['snapshot'].get('criteria',[])}}
         return matrix_json(row,criteria,suppliers,selected,context)
 
 
@@ -564,9 +591,9 @@ def save_matrix(project_id: UUID, payload: MatrixSave):
         row = connection.execute('SELECT * FROM project_matrix WHERE project_id=%s FOR UPDATE',(project_id,)).fetchone()
         if row and row['context'] == context and row['entries'] == entries: return matrix_json(row,criteria,suppliers,selected,context)
         if payload.expected_revision != (row['revision'] if row else 0): raise HTTPException(409,'Matrix changed in another window. Reload before saving. Your entries are kept.')
-        row = connection.execute("""INSERT INTO project_matrix(project_id,entries,context,revision) VALUES (%s,%s,%s,1)
-            ON CONFLICT(project_id) DO UPDATE SET entries=EXCLUDED.entries,context=EXCLUDED.context,
-            revision=project_matrix.revision+1,updated_at=clock_timestamp() RETURNING *""",(project_id,Jsonb(entries),context)).fetchone()
+        row = connection.execute("""INSERT INTO project_matrix(project_id,entries,context,revision,input_basis) VALUES (%s,%s,%s,1,%s)
+            ON CONFLICT(project_id) DO UPDATE SET entries=EXCLUDED.entries,context=EXCLUDED.context,input_basis=EXCLUDED.input_basis,
+            revision=project_matrix.revision+1,updated_at=clock_timestamp() RETURNING *""",(project_id,Jsonb(entries),context,Jsonb({'currency':criteria['currency'],'criteria':selected}))).fetchone()
         touch_project(connection,project_id)
         return matrix_json(row,criteria,suppliers,selected,context)
 

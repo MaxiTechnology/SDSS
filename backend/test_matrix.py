@@ -4,7 +4,7 @@ import database
 import pytest
 from psycopg import sql
 from fastapi.testclient import TestClient
-from app import app, matrix_errors
+from app import app, matrix_errors, matrix_recovery, matrix_json
 
 def test_matrix_ranges_missing_and_price_review():
     rows=[{'id':'a','total_price':'100'}]
@@ -57,8 +57,38 @@ def test_matrix_persistence_and_conflicts(monkeypatch):
         assert client.get('/api/projects/'+str(uuid4())+'/matrix').status_code==404
         s=suppliers[0];client.put(base+'/suppliers/'+s['id'],json={'name':'A edited','location':'','description':'','expected_updated_at':s['updated_at']})
         assert client.put(base+'/matrix',json=data).status_code==409
-        assert client.get(base+'/matrix').json()['needs_review']
+        recovery=client.get(base+'/matrix').json()
+        assert recovery['needs_review'] and not recovery['ready'] and recovery['recovery']['count']==4
+        # Simulate a pre-migration matrix; recover only from its exact ranking snapshot.
+        with isolated() as conn:conn.execute('UPDATE project_matrix SET input_basis=NULL WHERE project_id=%s',(pid,))
+        legacy=client.get(base+'/matrix').json()
+        assert legacy['recovery']==recovery['recovery']
+        assert client.post(base+'/rankings',json={'context':legacy['context'],'matrix_revision':3}).status_code==409
+        saved=client.put(base+'/matrix',json={'context':legacy['context'],'expected_revision':3,'entries':legacy['recovery']['entries']})
+        assert saved.status_code==200,saved.text
+        assert saved.json()['ready'] and not saved.json()['needs_review'] and saved.json()['revision']==4
+        assert client.put(base+'/matrix',json={'context':legacy['context'],'expected_revision':3,'entries':legacy['recovery']['entries']}).json()['revision']==4
         assert client.get(base+'/rankings').json()['stale']
         assert client.get(base+'/rankings').json()['snapshot']==run.json()['snapshot']
     finally:
         with original() as conn: conn.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))
+
+
+def test_recovery_requires_matching_meaning_currency_and_current_validation():
+    criteria={'currency':'USD','configuration':{'maximum_price':'110'}}
+    suppliers=[{'id':'a','name':'A','total_price':'100'},{'id':'c','name':'C','total_price':'110'}]
+    selected=[{'id':'price','name':'Price','unit':'USD','direction':'cost','minimum':'0'}, {'id':'quality','name':'Quality','unit':'points / 100','direction':'benefit','maximum':'100'}]
+    basis={'currency':'USD','criteria':selected}
+    row={'entries':{'a':{'price':'100','quality':'90'},'b':{'price':'120','quality':'80'}},'context':'old','revision':1,'input_basis':basis}
+    result=matrix_recovery(row,criteria,suppliers,selected)
+    assert result['count']==2 and result['entries']=={'a':{'price':'100','quality':'90'},'c':{'price':None,'quality':None}}
+    response=matrix_json(row,criteria,suppliers,selected,'new')
+    assert response['needs_review'] and not response['ready'] and response['entries']['a']['price'] is None
+    assert response['recovery']==result
+    assert matrix_recovery(row,{**criteria,'currency':'RUB'},suppliers,selected)['count']==0
+    assert not matrix_recovery({**row,'input_basis':None},criteria,suppliers,selected)['available']
+    changed=[selected[0],{**selected[1],'unit':'points / 5'}]
+    assert matrix_recovery(row,criteria,suppliers,changed)['entries']['a']['quality'] is None
+    assert matrix_recovery(row,criteria,[{'id':'a','total_price':'105'},suppliers[1]],selected)['entries']['a']['price'] is None
+    bounded=[selected[0],{**selected[1],'maximum':'80'}]
+    assert matrix_recovery(row,criteria,suppliers,bounded)['entries']['a']['quality'] is None
