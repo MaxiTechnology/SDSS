@@ -97,3 +97,10 @@ After a review-note edit on PRJ-000002, screenshot 793 offered ten compatible ol
 Phone navigation now exposes both Dashboard and Purchasing Projects. Wide tables have named, focusable scroll regions instead of overflowing the whole page, including criteria, manual/AHP/AI weights, ranking comparisons and saved reports. Narrow forms, action groups, dialogs and pagination wrap; controls receive larger touch targets. Desktop sidebar remains available and scrollable.
 
 Browser viewport checks at 375 and 768 pixels verify document width, Dashboard/project navigation, project entry, criteria configuration, manual/AHP/AI weighting, matrix entry and keyboard horizontal scrolling, review-dialog note entry/cancellation, and report layout. All 19 browser tests passed across the suite and targeted rerun; one project-reload test timed out in the parallel run and passed separately. Screenshots of phone matrix/report were visually inspected. Production build passed. These use mocked APIs in desktop Chrome viewport emulation, not physical-device Safari or a full accessibility audit. User acceptance and broader SDSS-017 recovery/end-to-end checks remain pending.
+
+
+## Smaller-screen and outage user acceptance - 2026-11-18
+
+Screenshots 800–801 show navigation, wrapped filters, table scrolling and vertically stacked form fields in a snapped narrow Chrome window. The user checked the form footer and cancelled without creating a project. The user reported pushing this checkpoint.
+
+The user stopped the backend while keeping the frontend running. Screenshot 803 shows the unavailable state hiding totals and offering Try again, but the general fallback incorrectly asked the user to check entries. After restarting Uvicorn and retrying, screenshot 805 shows both projects restored as Approved, with zero Deferred / Needs review. The API helper now distinguishes transport failure, timeout, missing-detail server errors and unreadable success responses from validation errors. No saved records were changed by this outage test.

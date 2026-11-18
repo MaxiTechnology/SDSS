@@ -41,9 +41,8 @@ test("save failure preserves entries, retry and reopen survive refresh", async (
   await page.goto("/");
   await expect(page.getByText("No purchasing projects yet")).toBeVisible();
   await page.getByRole("button", { name: "Create Project" }).first().click();
-  await page
-    .getByRole("button", { name: "Create Project", exact: true })
-    .click();
+  await expect(page.getByLabel("Project Name")).toBeVisible();
+  await page.locator("form").getByRole("button", { name: "Create Project", exact: true }).click();
   expect(attempts).toHaveLength(0);
   await page.getByLabel("Project Name").fill("Laptop fleet renewal");
   await page.getByLabel("Purchasing Category").selectOption("IT & Hardware");

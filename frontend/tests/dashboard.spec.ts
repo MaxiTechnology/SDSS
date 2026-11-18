@@ -29,3 +29,21 @@ test('dashboard unavailable state does not invent zero totals and retry recovers
  await expect(page.getByRole('button',{name:'All projects 0',exact:true})).toBeVisible();
  await expect(page.getByText('No saved projects yet.',{exact:false})).toBeVisible();
 });
+
+
+test('backend outage explains server availability and retry restores saved counts',async({page})=>{
+ let failure='gateway';
+ await page.route('**/api/projects',route=>{
+ if(failure==='gateway')return route.fulfill({status:500,contentType:'text/plain',body:'Internal proxy error'});
+ if(failure==='network')return route.abort('connectionrefused');
+ return route.fulfill({json:[]});
+ });
+ await page.goto('/#/dashboard');
+ await expect(page.getByRole('alert')).toContainText('server is temporarily unavailable');
+ await expect(page.getByRole('alert')).not.toContainText('check your entries');
+ await expect(page.getByRole('button',{name:'All projects 0',exact:true})).toHaveCount(0);
+ failure='network';await page.getByRole('button',{name:'Try again',exact:true}).click();
+ await expect(page.getByRole('alert')).toContainText('Could not reach the server');
+ failure='';await page.getByRole('button',{name:'Try again',exact:true}).click();
+ await expect(page.getByRole('button',{name:'All projects 0',exact:true})).toBeVisible();
+});
