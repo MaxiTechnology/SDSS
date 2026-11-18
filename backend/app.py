@@ -635,23 +635,69 @@ class SensitivityRequest(BaseModel):
         return values
 
 
+def sensitivity_result(connection,project_id,payload):
+    from topsis import calculate
+    _,_,_,context = matrix_context(connection,project_id)
+    matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
+    row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',(project_id,)).fetchone()
+    if not row or row['id'] != payload.baseline_id or not matrix or ranking_json(row,context,matrix['revision'])['stale']:
+        raise HTTPException(409,'The baseline changed. Calculate current rankings before running a scenario.')
+    snapshot = row['snapshot']
+    if set(payload.weights) != {c['id'] for c in snapshot['criteria']}:
+        raise HTTPException(422,'Use exactly the baseline scoring criteria.')
+    try:
+        result = calculate(snapshot['entries'],snapshot['suppliers'],snapshot['criteria'],payload.weights)
+    except ValueError as error:
+        raise HTTPException(422,str(error)) from None
+    return {'baseline_id':str(row['id']), 'weights':{k:str(v) for k,v in payload.weights.items()}, 'result':result}
+
 @app.post('/api/projects/{project_id}/sensitivity')
 def simulate_sensitivity(project_id: UUID, payload: SensitivityRequest):
-    from topsis import calculate
     with database.connect() as connection:
-        _,_,_,context = matrix_context(connection,project_id)
-        matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
-        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',(project_id,)).fetchone()
-        if not row or row['id'] != payload.baseline_id or not matrix or ranking_json(row,context,matrix['revision'])['stale']:
-            raise HTTPException(409,'The baseline changed. Calculate current rankings before running a scenario.')
-        snapshot = row['snapshot']
-        if set(payload.weights) != {c['id'] for c in snapshot['criteria']}:
-            raise HTTPException(422,'Use exactly the baseline scoring criteria.')
-        try:
-            result = calculate(snapshot['entries'],snapshot['suppliers'],snapshot['criteria'],payload.weights)
-        except ValueError as error:
-            raise HTTPException(422,str(error)) from None
-        return {'baseline_id':str(row['id']), 'weights':{k:str(v) for k,v in payload.weights.items()}, 'result':result}
+        return sensitivity_result(connection,project_id,payload)
+
+
+class ScenarioSave(SensitivityRequest):
+    id: UUID
+    name: str = Field(min_length=1,max_length=120)
+    notes: str = Field(default='',max_length=2000)
+
+    @field_validator('name','notes',mode='before')
+    @classmethod
+    def trim_text(cls,value):
+        return value.strip() if isinstance(value,str) else value
+
+
+def scenario_json(row):
+    return {'id':str(row['id']),'baseline_id':str(row['baseline_id']),
+            'created_at':row['created_at'].isoformat(),**row['snapshot']}
+
+
+@app.get('/api/projects/{project_id}/sensitivity/scenarios')
+def get_scenarios(project_id:UUID,baseline_id:UUID):
+    with database.connect() as connection:
+        require_project(connection,project_id)
+        rows=connection.execute('SELECT * FROM sensitivity_scenarios WHERE project_id=%s AND baseline_id=%s ORDER BY created_at,id',(project_id,baseline_id)).fetchall()
+        return {'scenarios':[scenario_json(row) for row in rows]}
+
+
+@app.post('/api/projects/{project_id}/sensitivity/scenarios')
+def save_scenario(project_id:UUID,payload:ScenarioSave):
+    from psycopg.types.json import Jsonb
+    request=payload.model_dump(mode='json')
+    with database.connect() as connection:
+        require_project(connection,project_id)
+        old=connection.execute('SELECT * FROM sensitivity_scenarios WHERE id=%s',(payload.id,)).fetchone()
+        if old:
+            if old['project_id']!=project_id or old['request']!=request:
+                raise HTTPException(409,'This scenario identifier was already used. Reload before saving another scenario.')
+            return scenario_json(old)
+        result=sensitivity_result(connection,project_id,payload)
+        count=connection.execute('SELECT count(*) AS total FROM sensitivity_scenarios WHERE project_id=%s AND baseline_id=%s',(project_id,payload.baseline_id)).fetchone()['total']
+        if count>=20:raise HTTPException(422,'Up to 20 scenarios can be saved for one baseline ranking.')
+        snapshot={**result,'name':payload.name,'notes':payload.notes,'actor':'Demo User (unauthenticated)'}
+        row=connection.execute('INSERT INTO sensitivity_scenarios(id,project_id,baseline_id,request,snapshot) VALUES (%s,%s,%s,%s,%s) RETURNING *',(payload.id,project_id,payload.baseline_id,Jsonb(request),Jsonb(snapshot))).fetchone()
+        return scenario_json(row)
 
 
 class DecisionRequest(BaseModel):
@@ -739,6 +785,8 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
                     'revision_reason': payload.revision_reason, 'project': ProjectFields(**project).model_dump(mode='json'),
                     'ranking': run['snapshot']}
         criteria, eligible, _, _ = matrix_context(connection, project_id)
+        scenarios=connection.execute('SELECT * FROM sensitivity_scenarios WHERE project_id=%s AND baseline_id=%s ORDER BY created_at,id',(project_id,payload.ranking_id)).fetchall()
+        snapshot['sensitivity_scenarios']=[scenario_json(r) for r in scenarios]
         snapshot['reference'] = f"PRJ-{project['project_number']:06d}"
         active_weights = connection.execute('SELECT method,provenance FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
         snapshot['weight_method'] = {'ahp':'AHP pairwise weighting (approved)','ai':'AI-assisted weighting (approved)','manual':'Manual percentage weighting (approved)'}[active_weights['method']]

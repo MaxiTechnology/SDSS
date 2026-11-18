@@ -8,6 +8,24 @@ from xml.sax.saxutils import escape
 LABELS = {'approve': 'Recommended supplier approved', 'alternative': 'Alternative supplier approved', 'defer': 'Purchase deferred - no award'}
 
 
+def sensitivity_text(snapshot):
+    scenarios=snapshot.get('sensitivity_scenarios',[])
+    if not scenarios:
+        return 'No sensitivity findings were saved with this decision; no conclusion about ranking stability can be inferred from this report.'
+    baseline=snapshot['ranking']
+    leaders=lambda rows: sorted(r['id'] for r in rows if r['rank']==1)
+    names={c['id']:c['name'] for c in baseline['criteria']}
+    lines=['Saved weight scenarios for this decision baseline. These are selected tests, not proof of stability across all possible weights. Approved weights and the purchasing decision are unchanged by simulation.']
+    for scenario in scenarios:
+        same=leaders(baseline['result']['rows'])==leaders(scenario['result']['rows'])
+        lines.extend([f"Scenario: {scenario['name']} | Saved: {scenario['created_at']} | By: {scenario['actor']}",
+                      'Weights: '+ '; '.join(f"{names.get(k,k)}: {v}%" for k,v in scenario['weights'].items()),
+                      'Highest-ranked supplier set '+('unchanged.' if same else 'changed.'),
+                      'Results: '+ '; '.join(f"{r['name']}: baseline rank {next(b['rank'] for b in baseline['result']['rows'] if b['id']==r['id'])}, scenario rank {r['rank']}, score {Decimal(str(r['score'])):.6f}" for r in scenario['result']['rows']),
+                      'Notes: '+(scenario['notes'] or 'No additional notes.')])
+    return '\n'.join(lines)
+
+
 def report_data(row):
     snapshot = row['snapshot']; ranking = snapshot['ranking']; project = snapshot['project']
     leaders = [r['name'] for r in ranking['result']['rows'] if r['rank'] == 1]
@@ -44,7 +62,7 @@ def report_data(row):
         'eligibility_notes': eligibility_notes,
         'evidence_files': snapshot.get('evidence_files',[]),
         'evidence_note': ('Evidence attachments were not captured in this older decision snapshot.' if 'evidence_files' not in snapshot else 'File metadata below was recorded at confirmation; later file changes do not alter this saved record.' if snapshot['evidence_files'] else 'No evidence attachments were recorded at confirmation.'),
-        'sensitivity': 'No sensitivity findings were saved with this decision. Simulations are temporary; no conclusion about ranking stability can be inferred from this report.',
+        'sensitivity': sensitivity_text(snapshot),
         'notice': 'Synthetic-data demonstration. Recorded as an unauthenticated demo user; this is not a purchase order. This report reproduces a saved version and does not certify that it is the latest decision or that current inputs are unchanged.',
     }
 
@@ -110,7 +128,7 @@ def render_pdf(report):
     for file in report['evidence_files']:
         section(file['filename'], [f"Supplier: {file['supplier_name']} | Requirement: {file['check_name'] or 'General supplier evidence'}", f"File ID: {file['id']} | Size: {file['size_bytes']} bytes", f"SHA-256: {file['sha256']}", f"Uploaded: {file['created_at']} | By: {file['uploaded_by']}"])
     section('Eligibility at confirmation', report['eligibility_notes'])
-    section('Sensitivity analysis', [report['sensitivity']])
+    section('Sensitivity analysis', report['sensitivity'].split('\n'))
     section('Report limitations', [report['notice']])
     buffer = BytesIO()
     def footer(canvas, doc):

@@ -23,7 +23,7 @@ The API journey and browser page checks complement each other. There is no claim
 - SDSS-009: AHP comparisons, diagnostics, persistence, approval and saved version history were added after the manual acceptance check. Separate tests verify the AHP path. The user completed the 40/20/20/10/10 comparison example, approved it, recalculated rankings, confirmed decision version 2 and downloaded its AHP report. CR display and pagination were subsequently refined.
 - SDSS-010: AI suggestion generation, strict validation, adjustment, provenance/history and explicit approval are implemented. The user verified Cloudflare setup; a live synthetic suggestion and isolated API/browser checks passed. The user completed AI approval, decision version 3 and its PDF report. Manual and AHP fallback work.
 - SDSS-011: PDF/text upload, retained cloud storage, version-bound reviews and historical downloads are implemented. Authenticated access scope remains pending; use synthetic documents only.
-- SDSS-014: sensitivity trials are temporary; reports truthfully identify the absence of saved findings.
+- SDSS-014: named scenario persistence and decision-report snapshots are implemented; user acceptance remains pending.
 - SDSS-018: real dashboard metrics, derived project statuses, status filters and workflow/report navigation are implemented. Global secondary supplier/evaluation/report/settings lists remain disabled; user acceptance of dashboard and filtering is pending.
 - SDSS-017: full AHP/AI journeys, broader accessibility/mobile review and recovery/deployment verification remain incomplete.
 - Login, roles, operational safeguards and real purchasing authorization are outside current demonstration readiness. APIs must stay local.
@@ -59,3 +59,13 @@ Screenshot 760 showed one project, one approved decision, three supplier entries
 ## Matrix review follow-up
 
 Saving a supplier review changes the review revision included in matrix context. A context mismatch currently presents an empty matrix and requires explicit resubmission before recalculation, even when the project has no mandatory checks. Prior saved decisions remain intact. Automatically reusing old numbers is not implemented: changes to units, currency or selected criteria must not silently reinterpret old inputs. This usability limitation was observed during the evidence walkthrough and remains a follow-up.
+
+
+## Mandatory requirement user acceptance - 2026-11-18
+
+The user created PRJ-000002, configured a mandatory document review and approved equal manual weights. All suppliers initially appeared Pending and the matrix was blocked. A and B were marked Passed; C was marked Failed and excluded from both matrix and rankings. A dominated all five criteria and scored 1, B scored 0. The initial report truthfully showed no attachments: notes had been saved without files. The user then uploaded requirement-linked documents for A and B, saved their reviews, recalculated and revised the decision. Screenshot 781 shows both saved evidence records; the user confirmed both in the downloaded PDF. Original laptop decision version 4 remains separate.
+
+
+## Saved sensitivity implementation verification - 2026-11-18
+
+Default backend suite: 57 passed, nine opt-in database skips. Three targeted browser checks passed: preview/retry/reset/stale baseline, named save with ambiguous-failure retry identity and reopening after refresh, and saved report/PDF handling. An isolated Neon journey applied migration 12 twice, compared stored results with server simulation, verified idempotency and changed-request conflict, project isolation, unchanged approved weights/rankings, decision snapshot capture, report stability after later saves, and rejection of saves against stale ranking inputs. PDF layout with saved scenario weights, changed winner, comparative ranks/scores and notes was rendered and visually checked. Migration 12 was applied to the configured database without editing demonstration records. User acceptance of named scenarios and report inclusion remains pending.

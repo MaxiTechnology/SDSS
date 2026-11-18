@@ -205,6 +205,17 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (11)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 12").fetchone():
+            connection.execute("""
+                CREATE TABLE sensitivity_scenarios (
+                    id uuid PRIMARY KEY, project_id uuid NOT NULL REFERENCES purchasing_projects(id),
+                    baseline_id uuid NOT NULL REFERENCES ranking_runs(id), request jsonb NOT NULL,
+                    snapshot jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE INDEX sensitivity_scenarios_baseline_idx ON sensitivity_scenarios(project_id,baseline_id,created_at);
+                INSERT INTO sdss_migrations(version) VALUES (12)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:
