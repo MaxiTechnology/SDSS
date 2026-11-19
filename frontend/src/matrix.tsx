@@ -1,12 +1,13 @@
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {api} from './api';
 type Matrix={entries:Record<string,Record<string,string|null>>;suppliers:{id:string;name:string}[];criteria:{id:string;name:string;unit:string;direction:string;minimum:string|null;maximum:string|null}[];context:string;revision:number;needs_review:boolean;ready:boolean;recovery?:{entries:Record<string,Record<string,string|null>>;count:number;available:boolean}|null};
 export function EvaluationMatrix({projectId}:{projectId:string}){
  const base=`/api/projects/${projectId}/matrix`;
  const [saved,setSaved]=useState<Matrix|null>(null),[entries,setEntries]=useState<Matrix['entries']>({}),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const dirty=!!saved&&JSON.stringify(entries)!==JSON.stringify(saved.entries);
- async function load(){setBusy(true);setError('');try{const result=await api<Matrix>(base);setSaved(result);setEntries(result.entries);}catch(e){setError(e instanceof Error?e.message:'Loading failed.');}finally{setBusy(false);}}
- useEffect(()=>{void load();},[projectId]);
+ const loadVersion=useRef(0);
+ async function load(){const version=++loadVersion.current;setBusy(true);setError('');try{const result=await api<Matrix>(base);if(version!==loadVersion.current)return;setSaved(result);setEntries(result.entries);}catch(e){if(version===loadVersion.current)setError(e instanceof Error?e.message:'Loading failed.');}finally{if(version===loadVersion.current)setBusy(false);}}
+ useEffect(()=>{setSaved(null);setEntries({});setNotice('');void load();return()=>{loadVersion.current++;};},[projectId]);
  useEffect(()=>{const fn=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',fn);return()=>window.removeEventListener('beforeunload',fn);},[dirty]);
  async function save(){setBusy(true);setError('');try{const result=await api<Matrix>(base,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries,context:saved!.context,expected_revision:saved!.revision})});setSaved(result);setEntries(result.entries);setNotice(result.ready?'Matrix saved. All required values are provided.':'Draft saved. Complete the missing values before calculating rankings.');}catch(e){setError(e instanceof Error?e.message:'Saving failed. Your entries are kept.');}finally{setBusy(false);}}
  async function calculate(){setBusy(true);setError('');try{await api(base.replace('/matrix','/rankings'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context:saved!.context,matrix_revision:saved!.revision})});location.hash=`/projects/${projectId}/rankings`;}catch(e){setError(e instanceof Error?e.message:'Calculation failed.');}finally{setBusy(false);}}

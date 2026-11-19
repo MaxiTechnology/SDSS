@@ -31,7 +31,7 @@ Remaining release verification:
 - Physical mobile devices / additional browser engines and comprehensive accessibility review.
 - Deployment and operational recovery outside the local Windows development setup.
 - Deployment security review remains. First-account and role acceptance were completed by the user; legacy Demo User records retain their historical attribution.
-- Global supplier/evaluation/report pages and other settings remain disabled; project-scoped workflows and Administrator User Accounts are implemented.
+- Shared Suppliers, Criteria & Weighting (including draft-only reusable templates), Evaluations and Reports pages are implemented; user acceptance is pending. See [workspace page scope](workspace-pages.md). Administrator User Accounts remains role-restricted. Other settings beyond this scope are not implemented.
 
 These gaps mean the whole project and SDSS-017 should not be marked complete solely from passing existing checks.
 

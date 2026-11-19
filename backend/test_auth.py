@@ -77,6 +77,10 @@ def test_real_sessions_permissions_account_lifecycle_and_attribution(monkeypatch
         approver=client();login(approver,'approver');result=req(approver,'POST','/api/auth/change-password',{'current_password':secret,'new_password':changed});approver.headers['X-CSRF-Token']=result['csrf_token']
         req(approver,'GET','/api/projects');req(approver,'GET','/api/auth/users',status=403)
         req(approver,'POST','/api/projects',{},403)
+        for name in ('suppliers','templates','evaluations','reports'):req(approver,'GET','/api/workspace/'+name)
+        req(approver,'POST','/api/workspace/templates',{},403)
+        req(approver,'PUT','/api/workspace/templates/'+str(uuid4()),{},403)
+        req(officer,'POST','/api/workspace/templates',{},422)
         pid=str(uuid4());base='/api/projects/'+pid
         req(officer,'POST','/api/projects',{'id':pid,'name':'Authenticated synthetic workflow','currency':'RUB'},201)
         suppliers=[req(officer,'POST',base+'/suppliers',{'id':str(uuid4()),'name':n},201) for n in ('Alpha','Beta')]
@@ -95,6 +99,17 @@ def test_real_sessions_permissions_account_lifecycle_and_attribution(monkeypatch
             assert str(row['actor_id'])==users['approver']['id'] and row['snapshot']['actor_role']=='approver'
         report=req(approver,'GET',base+'/decisions/'+saved['id']+'/report')
         assert 'signed-in account' in report['notice']
+        # Shared templates remain preparation actions; an Approver can only inspect them.
+        meta=next(p for p in req(officer,'GET','/api/workspace/templates')['projects'] if p['id']==pid)
+        template=req(officer,'POST','/api/workspace/templates',{'id':str(uuid4()),'name':'Authenticated template','source_project_id':pid,'expected_source_updated_at':meta['updated_at'],'expected_criteria_revision':meta['criteria_revision'],'expected_weight_revision':meta['weight_revision'],'include_weights':True},201)
+        preview=req(officer,'GET','/api/workspace/templates/'+template['id']+'/preview?project_id='+pid)
+        apply={'id':str(uuid4()),'project_id':pid,'expected_project_updated_at':preview['project_updated_at'],'expected_criteria_revision':preview['criteria_revision'],'expected_weight_revision':preview['weight_revision'],'expected_template_version':template['version'],'confirmed':True}
+        req(approver,'POST','/api/workspace/templates/'+template['id']+'/apply',apply,403)
+        req(officer,'POST','/api/workspace/templates/'+template['id']+'/apply',apply)
+        assert req(officer,'GET',base+'/weights/manual')['approved'] is False
+        assert req(approver,'GET',base+'/decisions/'+saved['id']+'/report')==report
+        with isolated() as c:
+            assert str(c.execute('SELECT created_by FROM criteria_templates WHERE id=%s',(template['id'],)).fetchone()['created_by'])==users['officer']['id']
         # Logout invalidates the server session, even if its old cookie is replayed.
         old=approver.cookies.get(auth.cookie_name());req(approver,'POST','/api/auth/logout',status=204);assert not auth.resolve_session(old)
         req(approver,'GET','/api/projects',status=401)

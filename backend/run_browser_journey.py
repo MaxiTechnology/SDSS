@@ -104,6 +104,7 @@ def run(auth_only=False):
             if result.returncode==0:
                 from pypdf import PdfReader
                 checks={
+                    'live-workspace-report.pdf':('Browser approver (browser-approver)','signed-in account'),
                     'live-approver-report.pdf':('Browser approver (browser-approver)','signed-in account'),
                     'live-report.pdf':('Browser Supplier A','Mandatory maximum price: 110','Browser cost emphasis','synthetic-A.txt','synthetic-C.txt'),
                     'live-ahp-report.pdf':('AHP pairwise weighting (approved)','AHP consistency','CR: 0.000000','Browser Supplier A'),

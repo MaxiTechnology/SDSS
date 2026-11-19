@@ -1229,3 +1229,7 @@ def download_evidence(project_id:UUID,supplier_id:UUID,document_id:UUID):
     return Response(bytes(row['content']),media_type=row['mime_type'],headers={
         'Content-Disposition':f"attachment; filename=\"SDSS-evidence-{document_id}{extension}\"; filename*=UTF-8''{quote(row['filename'],safe='')}",
         'X-Content-Type-Options':'nosniff','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; sandbox"})
+
+
+from workspace import router as workspace_router
+app.include_router(workspace_router)

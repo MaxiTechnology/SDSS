@@ -11,7 +11,7 @@ def matrix_token(criteria,weights,eligible):
     return hashlib.sha256(json.dumps([criteria['revision'],criteria['currency'],weights['revision'],[(s['id'],s['updated_at'],s['revision']) for s in eligible]],default=str).encode()).hexdigest()
 
 
-def derive(project,suppliers,criteria,weights,reviews,matrix,run,decision,eligibility_fn,errors_fn):
+def derive(project,suppliers,criteria,weights,reviews,matrix,run,decision,eligibility_fn,errors_fn,*,include_current=False):
     prefix='/projects/'+str(project['id'])
     stage='Suppliers';path=prefix+'/suppliers';status='Draft' if len(suppliers)<2 else 'In progress'
     ready=False;run_current=False
@@ -48,8 +48,10 @@ def derive(project,suppliers,criteria,weights,reviews,matrix,run,decision,eligib
     activity=[project['updated_at']]
     for row,field in [(criteria,'updated_at'),(weights,'updated_at'),(matrix,'updated_at'),(run,'created_at'),(decision,'created_at')]:
         if row and row.get(field):activity.append(row[field])
-    return {'workflow_status':status,'workflow_stage':stage,'resume_path':path,'supplier_count':len(suppliers),
+    result = {'workflow_status':status,'workflow_stage':stage,'resume_path':path,'supplier_count':len(suppliers),
             'last_activity_at':max(activity).isoformat(),'decision_id':str(decision['id']) if decision else None}
+    if include_current:result['evaluation_current']=run_current
+    return result
 
 
 # A single statement uses one MVCC snapshot and avoids one cloud round trip per table.
@@ -94,14 +96,17 @@ def _record(value):
     return row
 
 
+def summarize_project(row,serialize,eligibility_fn,errors_fn,*,include_current=False):
+    suppliers = [_record(s) for s in row['_suppliers']]
+    parsed_reviews = [_record(r) for r in row['_reviews']]
+    reviews = {r['supplier_id']:r for r in parsed_reviews}
+    state = derive(row,suppliers,_record(row['_criteria']),_record(row['_weights']),
+        reviews,_record(row['_matrix']),_record(row['_run']),_record(row['_decision']),
+        eligibility_fn,errors_fn,include_current=include_current)
+    return {**serialize(row),**state}
+
+
 def load_projects(connection,serialize,eligibility_fn,errors_fn):
-    result = []
-    for row in connection.execute(PROJECTS_SQL).fetchall():
-        suppliers = [_record(s) for s in row['_suppliers']]
-        parsed_reviews = [_record(r) for r in row['_reviews']]
-        reviews = {r['supplier_id']:r for r in parsed_reviews}
-        state = derive(row,suppliers,_record(row['_criteria']),_record(row['_weights']),
-            reviews,_record(row['_matrix']),_record(row['_run']),_record(row['_decision']),
-            eligibility_fn,errors_fn)
-        result.append({**serialize(row),**state})
+    result = [summarize_project(row,serialize,eligibility_fn,errors_fn)
+              for row in connection.execute(PROJECTS_SQL).fetchall()]
     return sorted(result,key=lambda p:(p['last_activity_at'],p['id']),reverse=True)

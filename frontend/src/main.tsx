@@ -1,3 +1,4 @@
+import {SupplierDirectory,CriteriaLibrary,EvaluationOverview,ReportLibrary} from './workspace';
 import {AuthBoundary,useAuth,roleName} from './auth';
 import {Accounts} from './accounts';
 import { Dashboard, WORKFLOW_STATUSES } from './dashboard';
@@ -55,8 +56,16 @@ function Icon({ n, list = false }: { n: number; list?: boolean }) {
 function App() {
   const {user,signOut,changePassword}=useAuth();
   const canPrepare=user.role!=="approver",canManage=user.role==="administrator";
-  const accountView=location.hash.slice(1)==="/accounts";
   const [route, setRoute] = useState(location.hash.slice(1));
+  const accountView=route==="/accounts";
+  const workspaceInfo:Record<string,{title:string;subtitle:string}>= {
+    '/suppliers':{title:'Suppliers',subtitle:'Find and manage supplier entries across purchasing projects.'},
+    '/criteria':{title:'Criteria & Weighting',subtitle:'Review project setups and reuse criteria templates with fresh approval.'},
+    '/evaluations':{title:'Evaluations',subtitle:'Track evaluation readiness, calculations and next steps across projects.'},
+    '/reports':{title:'Reports',subtitle:'Search saved decision versions and download their reports.'},
+  };
+  const workspaceView=Object.prototype.hasOwnProperty.call(workspaceInfo,route);
+  const navPaths=['/dashboard','/','/suppliers','/criteria','/evaluations','/reports','/accounts'];
   const [items, setItems] = useState<Project[]>([]);
   const [hasList, setHasList] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,14 +111,15 @@ function App() {
   }, []);
   async function load() {
     const version = ++loadVersion.current;
-    const keepList = !detail && !accountView && hasList;
+    const keepList = !detail && !accountView && !workspaceView && hasList;
     const keepProject = nestedView && project?.id === routeProjectId;
-    setLoading(!keepList && !nestedView);
+    setLoading(!keepList && !nestedView && !workspaceView);
     setRefreshing(keepList);
     setError("");
     if (!keepProject) setProject(null);
     try {
-      if (accountView || keepProject) return;
+      if (accountView || workspaceView) { setNotice(""); return; }
+      if (keepProject) return;
       if (detail) {
         let pending = projectRequests.current.get(routeProjectId);
         if (!pending) {
@@ -212,7 +222,7 @@ function App() {
           </div>
         </div>
         <p className="suite">PROCUREMENT SUITE</p>
-        <nav aria-label="Main navigation">
+        <nav className="main-navigation" aria-label="Main navigation">
           {[
             "Dashboard",
             "Purchasing Projects",
@@ -223,12 +233,12 @@ function App() {
             "User Accounts",
           ].map((v, i) => (
             <button
-              aria-current={(i===0&&dashboardView)||(i===1&&!dashboardView&&!accountView)||(i===6&&accountView)?"page":undefined}
+              aria-current={(i===1?(!workspaceView&&!dashboardView&&!accountView):route===navPaths[i])?"page":undefined}
               key={v}
-              disabled={i !== 1 && i !== 0 && !(i===6&&canManage)}
-              title={i===6&&!canManage?"Administrator access only":i !== 1 && i !== 0 && i!==6 ? "Available in a later update" : undefined}
-              className={(i===0&&dashboardView)||(i===1&&!dashboardView&&!accountView)||(i===6&&accountView)?"active":""}
-              onClick={() => go(i===0?"/dashboard":i===6?"/accounts":"/")}
+              disabled={i===6&&!canManage}
+              title={i===6&&!canManage?"Administrator access only":undefined}
+              className={(i===1?(!workspaceView&&!dashboardView&&!accountView):route===navPaths[i])?"active":""}
+              onClick={() => go(navPaths[i])}
             >
               <Icon n={14 + i} />
               {v}
@@ -296,12 +306,12 @@ function App() {
           ) : (
             <div className="list-heading">
               <div>
-                <h1>{accountView?"User Accounts":dashboardView?"Dashboard":"Purchasing Projects"}</h1>
+                <h1>{workspaceView?workspaceInfo[route].title:accountView?"User Accounts":dashboardView?"Dashboard":"Purchasing Projects"}</h1>
                 <p className="subtitle">
-                  {accountView?"Manage accounts and permissions for the shared workspace.":dashboardView?"Track saved projects, current approvals and work needing review.":"Manage multi-criteria supplier evaluation projects and decision workflows."}
+                  {workspaceView?workspaceInfo[route].subtitle:accountView?"Manage accounts and permissions for the shared workspace.":dashboardView?"Track saved projects, current approvals and work needing review.":"Manage multi-criteria supplier evaluation projects and decision workflows."}
                 </p>
               </div>
-              {!accountView&&<button className="primary" disabled={!canPrepare} onClick={() => go("/new")}>
+              {!accountView&&!workspaceView&&<button className="primary" disabled={!canPrepare} onClick={() => go("/new")}>
                 <Icon n={0} list />
                 Create Project
               </button>}
@@ -320,7 +330,7 @@ function App() {
               {!fresh && !editing && <button onClick={() => void load()}>Try again</button>}
             </div>
           )}
-          {accountView ? <Accounts/> : (loading && !nestedView) || (!formView && !hasList && !error) ? (
+          {workspaceView ? (route==='/suppliers'?<SupplierDirectory/>:route==='/criteria'?<CriteriaLibrary/>:route==='/evaluations'?<EvaluationOverview/>:<ReportLibrary/>) : accountView ? <Accounts/> : (loading && !nestedView) || (!formView && !hasList && !error) ? (
             <p role="status">Loading projects…</p>
           ) : error && !formView ? (<p role="status">Saved project data could not be refreshed. Use Try again above.</p>) : dashboardView ? (
             <Dashboard onRefresh={()=>void load()} projects={items} onFilter={status=>{setStatusFilter(status);setSearch("");setPage(1);go("/");}} onOpen={p=>{setNotice("");go(p.resume_path||`/projects/${p.id}`);}} onReport={p=>go(`/projects/${p.id}/reports/${p.decision_id}`)} />

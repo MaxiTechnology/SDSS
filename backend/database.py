@@ -300,6 +300,27 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (14)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 15").fetchone():
+            connection.execute("""
+                CREATE TABLE criteria_templates (
+                    id uuid PRIMARY KEY, name varchar(100) NOT NULL, notes varchar(2000) NOT NULL DEFAULT '',
+                    currency varchar(3) NOT NULL, configuration jsonb NOT NULL, weights jsonb, request jsonb NOT NULL,
+                    source_project_id uuid NOT NULL REFERENCES purchasing_projects(id),
+                    source_revision integer NOT NULL, version integer NOT NULL DEFAULT 1,
+                    active boolean NOT NULL DEFAULT true, created_by uuid REFERENCES auth_users(id),
+                    actor text NOT NULL, created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE TABLE template_applications (
+                    id uuid PRIMARY KEY, template_id uuid NOT NULL REFERENCES criteria_templates(id),
+                    project_id uuid NOT NULL REFERENCES purchasing_projects(id), request jsonb NOT NULL,
+                    result jsonb NOT NULL, actor_id uuid REFERENCES auth_users(id), actor text NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE INDEX template_applications_project_idx ON template_applications(project_id);
+                INSERT INTO sdss_migrations(version) VALUES (15)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

@@ -1,4 +1,16 @@
 import {test,expect} from './fixtures';
+test('late initial matrix response cannot erase typed values',async({page})=>{
+ let count=0,release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+ const matrix={entries:{s1:{price:null,quality:null}},suppliers:[{id:'s1',name:'Synthetic supplier'}],criteria:[{id:'price',name:'Price',unit:'USD',direction:'cost',minimum:'0',maximum:null},{id:'quality',name:'Quality',unit:'points',direction:'benefit',minimum:'0',maximum:'100'}],context:'fixture',revision:0,needs_review:false,ready:false};
+ await page.route('**/api/projects**',async route=>{if(route.request().url().endsWith('/matrix')){count++;if(count===1){await gate;return route.fulfill({headers:{'x-test-stale':'yes'},json:matrix});}return route.fulfill({json:matrix});}return route.fulfill({json:{id:'p1',name:'Synthetic matrix',reference:'P1',currency:'USD'}});});
+ await page.goto('/#/projects/p1/matrix');
+ await page.getByLabel('Synthetic supplier: Price',{exact:true}).fill('100');
+ await page.getByLabel('Synthetic supplier: Quality',{exact:true}).fill('90');
+ const response=page.waitForResponse(r=>r.headers()['x-test-stale']==='yes');release();await (await response).finished();
+ await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ await expect(page.getByLabel('Synthetic supplier: Price',{exact:true})).toHaveValue('100');
+ await expect(page.getByLabel('Synthetic supplier: Quality',{exact:true})).toHaveValue('90');
+});
 for(const method of ['ai','ahp'])test(`late initial ${method} response cannot erase edits`,async({page})=>{
  let count=0,release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
  const criteria=[{id:'price',name:'Price',unit:'USD',direction:'cost'},{id:'quality',name:'Quality',unit:'points',direction:'benefit'}];

@@ -283,3 +283,64 @@ test('real account roles: mandatory password changes, server denial and signed a
  }
  console.log('Account creation, required password changes, role denials and attributed Approver decision verified.');
 });
+
+test('real workspace directories: supplier copies, reusable draft template and saved reports',async({page})=>{
+ await signIn(page);const request=page.context().request;
+ const original=await (await request.get(reportApi(manualReportURL))).json();
+ const sourceId=projectPath.split('/')[2];
+ await page.goto('/#/new');
+ await page.getByLabel('Project Name').fill('Browser Template Target');
+ await page.getByLabel('Currency').selectOption('RUB');
+ await page.locator('form').getByRole('button',{name:'Create Project',exact:true}).click();
+ await expect(page).toHaveURL(/#\/projects\/[0-9a-f-]+$/);
+ const targetPath=new URL(page.url()).hash.slice(1),targetId=targetPath.split('/')[2];
+ const nav=page.getByRole('navigation',{name:'Main navigation'});
+ await nav.getByRole('button',{name:'Suppliers',exact:true}).click();
+ for(const suffix of ['A','C']){
+  await page.getByLabel('Filter suppliers by project',{exact:true}).selectOption(sourceId);
+  await page.getByLabel('Search suppliers',{exact:true}).fill('Browser Supplier '+suffix);
+  await page.getByRole('button',{name:'Copy to Project',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Destination project',{exact:true}).selectOption(targetId);
+  await dialog.getByRole('button',{name:'Save Supplier Entry',exact:true}).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole('button',{name:'Refresh this page',exact:true})).toBeEnabled();
+ }
+ const targetSuppliers=await (await request.get('/api'+targetPath+'/suppliers')).json();
+ expect(targetSuppliers).toHaveLength(2);
+ for(const supplier of targetSuppliers){expect(await (await request.get('/api'+targetPath+'/suppliers/'+supplier.id+'/evidence')).json()).toMatchObject({files:[]});}
+ await nav.getByRole('button',{name:'Criteria & Weighting',exact:true}).click();
+ await page.getByLabel('Source project',{exact:true}).selectOption(sourceId);
+ await page.getByLabel('New template name',{exact:true}).fill('Browser reusable setup');
+ await page.getByLabel('New template notes',{exact:true}).fill('Synthetic reusable setup; fresh approval required.');
+ await page.getByLabel("Include the source project's currently approved weight values").check();
+ await page.getByRole('button',{name:'Save Reusable Template',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Browser reusable setup',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Preview and Apply',exact:true}).click();
+ const preview=page.getByRole('dialog');
+ await preview.getByLabel('Target project',{exact:true}).selectOption(targetId);
+ await preview.getByRole('button',{name:'Load Application Preview',exact:true}).click();
+ await expect(preview.getByRole('button',{name:'Apply as Draft',exact:true})).toBeDisabled();
+ await preview.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights.").check();
+ await page.screenshot({path:'test-results/live-template-preview.png',fullPage:true});
+ await preview.getByRole('button',{name:'Apply as Draft',exact:true}).click();
+ await expect(preview).not.toBeVisible();
+ await page.getByRole('button',{name:'Open draft weights',exact:true}).click();
+ const weights=await (await request.get('/api'+targetPath+'/weights/manual')).json();
+ expect(weights.approved).toBe(false);expect(weights.method).toBe('manual');
+ await nav.getByRole('button',{name:'Evaluations',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Workspace evaluations table'})).toContainText('Browser Template Target');
+ await page.screenshot({path:'test-results/live-workspace-evaluations.png',fullPage:true});
+ await nav.getByRole('button',{name:'Reports',exact:true}).click();
+ await expect(page.getByRole('region',{name:'Workspace reports table'}).getByRole('row')).toHaveCount(2);
+ await page.getByLabel('Latest saved version per project').uncheck();
+ await expect(page.getByRole('region',{name:'Workspace reports table'}).getByRole('row')).toHaveCount(5);
+ await page.getByLabel('Latest saved version per project').check();
+ const download=page.waitForEvent('download');
+ await page.getByRole('button',{name:'Download PDF',exact:true}).click();
+ await (await download).saveAs('test-results/live-workspace-report.pdf');
+ await page.getByRole('button',{name:'Open Saved Report',exact:true}).click();
+ await expect(page.getByText('Confirmed by Browser approver (browser-approver)',{exact:false})).toBeVisible();
+ expect(await (await request.get(reportApi(manualReportURL))).json()).toEqual(original);
+ console.log('Workspace supplier copies and draft template applied through real UI; old report unchanged.');
+});
