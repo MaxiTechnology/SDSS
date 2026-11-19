@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import report from './report-fixture.json' with { type: 'json' };
 test('saved version report, PDF retry and decision navigation',async({page})=>{
  let fail=true;

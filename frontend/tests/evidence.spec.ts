@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('evidence upload retry, review revision, cloud download and removal',async({page})=>{
  const updated='2026-11-18T00:00:00Z';let evidenceRevision=0,files:any[]=[],fail=true;const uploads:string[]=[];
  let row:any={id:'s1',name:'Supplier A',updated_at:updated,evidence_revision:0,checks:{cert:{status:'pending',notes:''}},total_price:null,price_status:null,eligibility:'pending',revision:0,needs_review:false,reviewer:null,reviewed_at:null};

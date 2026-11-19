@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('matrix saves drafts, validates ranges and reopens',async({page})=>{
  const project={id:'p1',reference:'PRJ-T',name:'Test',currency:'USD',status:'Draft',updated_at:'2026-11-16T10:00:00Z'};
  let matrix:any={entries:{a:{quality:null},b:{quality:null}},suppliers:[{id:'a',name:'Supplier A'},{id:'b',name:'Supplier B'}],criteria:[{id:'quality',name:'Quality',unit:'points / 100',direction:'benefit',minimum:'0',maximum:'100'}],context:'x'.repeat(64),revision:0,needs_review:false,ready:false};let fail=true;

@@ -6,7 +6,7 @@ type Determination={status:'pending'|'passed'|'failed';notes:string};
 type Supplier={evidence_revision?:number;id:string;name:string;updated_at:string;checks:Record<string,Determination>;total_price:string|null;price_status:string|null;eligibility:string;revision:number;needs_review:boolean;reviewer:string|null;reviewed_at:string|null};
 type Saved={weight_method?:string;suppliers:Supplier[];mandatory_checks:{id:string;name:string;requirement:string}[];maximum_price:string|null;currency:string;criteria_revision:number;eligible_count:number;ready:boolean};
 
-export function Eligibility({projectId}:{projectId:string}){
+export function Eligibility({projectId,readOnly=false}:{projectId:string;readOnly?:boolean}){
  const base=`/api/projects/${projectId}/eligibility`;
  const [saved,setSaved]=useState<Saved|null>(null),[active,setActive]=useState<Supplier|null>(null),[checks,setChecks]=useState<Record<string,Determination>>({}),[price,setPrice]=useState('');
  const [filesBusy,setFilesBusy]=useState(false);
@@ -29,7 +29,7 @@ export function Eligibility({projectId}:{projectId:string}){
  return <section className="supplier-page eligibility-page">
  <div className="card-heading"><div><h2>Supplier Eligibility Review</h2><p>Only suppliers who pass every mandatory requirement qualify for scoring.</p></div><span className="chip">{saved.eligible_count} eligible · {saved.suppliers.length-saved.eligible_count} excluded or pending</span></div>
  <p className="info">Missing or unreviewed requirements remain Pending. Failed requirements make a supplier Ineligible. At least two eligible suppliers are required for comparison.</p>
- <p className="supplier-note">Local demonstration: review notes and decisions are saved as Demo User. Evidence files are saved in the cloud. Reviews are unauthenticated; use synthetic demonstration files.</p>
+ <p className="supplier-note">Review notes record the signed-in reviewer. Evidence files are saved in the shared workspace; use synthetic demonstration files during testing.</p>
  {error&&!active&&<p role="alert" className="error">{error}</p>}
  {notice&&<p role="status" className="success">{notice}</p>}
  {!saved.mandatory_checks.length&&saved.maximum_price===null&&<p className="info">No mandatory requirements are configured. All current suppliers qualify without evidence checks. Add requirements on the Criteria page if needed.</p>}
@@ -41,15 +41,15 @@ export function Eligibility({projectId}:{projectId:string}){
  <div className="dialog-heading"><h2 id="review-title">Review: {active?.name}</h2><button aria-label="Close review" disabled={busy||filesBusy} onClick={close}>×</button></div>
  <div className="dialog-body project-form review-form">
  {error&&<p role="alert" className="error">{error} Cancel and refresh to load newer records.</p>}
- <fieldset disabled={busy||filesBusy}>{saved.mandatory_checks.map(c=><section className="review-check" key={c.id}><h3>{c.name}</h3><p>{c.requirement}</p><label>Determination for {c.name}<select value={checks[c.id]?.status??'pending'} onChange={e=>setChecks({...checks,[c.id]:{...checks[c.id],status:e.target.value as Determination['status']}})}><option value="pending">Pending</option><option value="passed">Passed</option><option value="failed">Failed</option></select></label><label>Review notes for {c.name}<textarea maxLength={2000} value={checks[c.id]?.notes??''} onChange={e=>setChecks({...checks,[c.id]:{...checks[c.id],notes:e.target.value}})}/></label><small>For Passed or Failed, describe the evidence reviewed and your finding.</small></section>)}
+ <fieldset disabled={readOnly||busy||filesBusy}>{saved.mandatory_checks.map(c=><section className="review-check" key={c.id}><h3>{c.name}</h3><p>{c.requirement}</p><label>Determination for {c.name}<select value={checks[c.id]?.status??'pending'} onChange={e=>setChecks({...checks,[c.id]:{...checks[c.id],status:e.target.value as Determination['status']}})}><option value="pending">Pending</option><option value="passed">Passed</option><option value="failed">Failed</option></select></label><label>Review notes for {c.name}<textarea maxLength={2000} value={checks[c.id]?.notes??''} onChange={e=>setChecks({...checks,[c.id]:{...checks[c.id],notes:e.target.value}})}/></label><small>For Passed or Failed, describe the evidence reviewed and your finding.</small></section>)}
  {saved.maximum_price!==null&&<section className="review-check"><h3>Maximum acceptable total price</h3><p>Limit: {saved.maximum_price} {saved.currency}. Equal to the limit is allowed.</p><label>Supplier total price ({saved.currency})<input type="number" min="0" step="0.01" value={price} onChange={e=>setPrice(e.target.value)}/></label><small>Leave empty for Pending. A price above the limit automatically fails.</small></section>}
  {!saved.mandatory_checks.length&&saved.maximum_price===null&&<p>No mandatory requirements to review.</p>}</fieldset>
- <fieldset disabled={busy}>{active&&<EvidenceFiles key={active.id} projectId={projectId} supplier={active} criteriaRevision={saved.criteria_revision} checks={saved.mandatory_checks} onBusy={setFilesBusy} onChanged={async revision=>{
+ <fieldset disabled={busy}>{active&&<EvidenceFiles readOnly={readOnly} key={active.id} projectId={projectId} supplier={active} criteriaRevision={saved.criteria_revision} checks={saved.mandatory_checks} onBusy={setFilesBusy} onChanged={async revision=>{
  setActive(current=>current?{...current,evidence_revision:revision,needs_review:true}:current);
  setNotice('Evidence changed. Review affected findings before saving.');
  await api<Saved>(base).then(setSaved).catch(()=>setError('Evidence was saved, but eligibility could not be refreshed. Cancel and refresh the review.'));
  }}/>}</fieldset>
- </div><div className="dialog-footer"><button className="secondary" disabled={busy||filesBusy} onClick={close}>Cancel</button><button className="primary" disabled={busy||filesBusy||!valid} onClick={()=>void save()}>{busy?'Saving…':'Save Review'}</button></div></dialog>
+ </div><div className="dialog-footer"><button className="secondary" disabled={busy||filesBusy} onClick={close}>Cancel</button><button className="primary" disabled={readOnly||busy||filesBusy||!valid} onClick={()=>void save()}>{busy?'Saving…':'Save Review'}</button></div></dialog>
  </section>;
 }
 

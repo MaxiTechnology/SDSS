@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('dashboard real totals, status filtering, search, pagination and workflow navigation',async({page})=>{
  const statuses=['Approved','Deferred','Needs review','Draft','In progress','Ready to evaluate','Evaluated'];
  const items=Array.from({length:14},(_,i)=>({id:'p'+i,name:'Project '+i,reference:'P'+i,category:i===0?'Hardware':'Other',currency:'USD',status:'Draft',workflow_status:statuses[i%7],workflow_stage:i===0?'Decision':'Criteria',supplier_count:3,updated_at:'2026-11-18T00:00:00Z',last_activity_at:'2026-11-18T00:00:00Z',resume_path:'/projects/p'+i+'/decision',decision_id:i===0?'d1':null}));

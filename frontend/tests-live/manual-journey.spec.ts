@@ -1,11 +1,20 @@
-import {test,expect} from '@playwright/test';
+import {test,expect,type Page} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
+
+async function signIn(page:Page){
+ await page.goto('/#/');
+ await page.getByLabel('Username',{exact:true}).fill('browser-admin');
+ await page.getByLabel('Password',{exact:true}).fill(process.env.SDSS_BROWSER_TEST_PASSWORD!);
+ await page.getByRole('button',{name:'Sign In',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Sign Out',exact:true})).toBeVisible();
+}
 
 test.describe.configure({mode:'serial'});
 let projectPath='',manualReportURL='',ahpReportURL='';
 function reportApi(url:string){const parts=new URL(url).hash.slice(1).split('/');return `/api/projects/${parts[2]}/decisions/${parts[4]}/report`;}
 
-test('real browser journey: setup, evidence, price eligibility, matrix, scenario, decision and PDF',async({page,request})=>{
+test('real browser journey: setup, evidence, price eligibility, matrix, scenario, decision and PDF',async({page})=>{
+ await signIn(page);const request=page.context().request;
  const isolation=await request.get('/api/test-isolation');expect(await isolation.json()).toEqual({schema:process.env.SDSS_BROWSER_TEST_SCHEMA,ai_mode:'synthetic-provider-fixture',ai_calls:0});
  const empty=await request.get('/api/projects');expect(await empty.json()).toEqual([]);
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
@@ -130,7 +139,8 @@ async function pdf(page:any,path:string){
  await (await download).saveAs(path);expect((await readFile(path)).subarray(0,5).toString()).toBe('%PDF-');
 }
 
-test('real AHP journey: inconsistent comparisons blocked, approval, recovery, revised decision and PDF',async({page,request})=>{
+test('real AHP journey: inconsistent comparisons blocked, approval, recovery, revised decision and PDF',async({page})=>{
+ await signIn(page);const request=page.context().request;
  const manualBefore=await (await request.get(reportApi(manualReportURL))).json();
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/#'+projectPath+'/weights/manual');
@@ -165,7 +175,8 @@ test('real AHP journey: inconsistent comparisons blocked, approval, recovery, re
  console.log('AHP decision version 2 and PDF saved; manual report preserved.');
 });
 
-test('real AI workflow with synthetic provider: consent, outage retry, adjustment, approval and PDF provenance',async({page,request})=>{
+test('real AI workflow with synthetic provider: consent, outage retry, adjustment, approval and PDF provenance',async({page})=>{
+ await signIn(page);const request=page.context().request;
  const api='/api'+projectPath;
  const ahpBefore=await (await request.get(reportApi(ahpReportURL))).json();
  const manualBefore=await (await request.get(reportApi(manualReportURL))).json();
@@ -215,4 +226,60 @@ test('real AI workflow with synthetic provider: consent, outage retry, adjustmen
  await page.screenshot({path:'test-results/live-ai-report.png',fullPage:true});
  expect(errors).toEqual([]);
  console.log('AI decision version 3 and PDF preserved original/applied weights; earlier reports unchanged.');
+});
+
+
+test('real account roles: mandatory password changes, server denial and signed approval',async({page})=>{
+ await signIn(page);
+ const request=page.context().request;
+ const originalReport=await (await request.get(reportApi(manualReportURL))).json();
+ await page.getByRole('button',{name:'User Accounts',exact:true}).click();
+ for(const role of ['officer','approver']){
+  await page.getByLabel('New username',{exact:true}).fill('browser-'+role);
+  await page.getByLabel('New display name',{exact:true}).fill('Browser '+role);
+  await page.getByLabel('New account role',{exact:true}).selectOption(role);
+  await page.getByLabel('Initial password',{exact:true}).fill(process.env.SDSS_BROWSER_TEST_PASSWORD!);
+  await page.getByLabel('Confirm initial password',{exact:true}).fill(process.env.SDSS_BROWSER_TEST_PASSWORD!);
+  await page.getByRole('button',{name:'Create Account',exact:true}).click();
+  await expect(page.getByRole('cell',{name:'browser-'+role,exact:true})).toBeVisible();
+ }
+ await page.screenshot({path:'test-results/live-accounts.png',fullPage:true});
+ const replacement=process.env.SDSS_BROWSER_TEST_PASSWORD!+' revised';
+ for(const role of ['officer','approver']){
+  await page.getByRole('button',{name:'Sign Out',exact:true}).click();
+  await page.getByLabel('Username',{exact:true}).fill('browser-'+role);
+  await page.getByLabel('Password',{exact:true}).fill(process.env.SDSS_BROWSER_TEST_PASSWORD!);
+  await page.getByRole('button',{name:'Sign In',exact:true}).click();
+  await expect(page.getByText('Replace your initial password before continuing.',{exact:true})).toBeVisible();
+  await page.getByLabel('Current password',{exact:true}).fill(process.env.SDSS_BROWSER_TEST_PASSWORD!);
+  await page.getByLabel('New password',{exact:true}).fill(replacement);
+  await page.getByLabel('Confirm new password',{exact:true}).fill(replacement);
+  await page.getByRole('button',{name:'Change Password',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Sign Out',exact:true})).toBeVisible();
+  const session=await (await request.get('/api/auth/session')).json();
+  const headers={'Origin':'http://127.0.0.1:5174','X-CSRF-Token':session.csrf_token};
+  expect((await request.get('/api/auth/users')).status()).toBe(403);
+  await page.goto('/#'+projectPath+'/decision');
+  await expect(page.getByRole('heading',{name:/Recommended supplier approved/})).toBeVisible();
+  if(role==='officer'){
+   await expect(page.getByRole('button',{name:'Create a decision revision',exact:true})).toHaveCount(0);
+   expect((await request.post('/api'+projectPath+'/decisions',{headers,data:{}})).status()).toBe(403);
+  }else{
+   expect((await request.post('/api/projects',{headers,data:{}})).status()).toBe(403);
+   await page.getByRole('navigation',{name:'Review project'}).getByRole('button',{name:'Matrix',exact:true}).click();
+   await expect(page.getByLabel('Browser Supplier A: Price / Total Purchasing Cost',{exact:true})).toBeDisabled();
+   await page.getByRole('navigation',{name:'Review project'}).getByRole('button',{name:'Final Decision',exact:true}).click();
+   await page.getByRole('button',{name:'Create a decision revision',exact:true}).click();
+   await page.getByLabel('Revision reason',{exact:true}).fill('Verified approval by the Approver role.');
+   await page.getByLabel('I have reviewed the ranking and confirm this purchasing decision.').check();
+   await page.getByRole('button',{name:'Confirm Decision',exact:true}).click();
+   await expect(page.getByRole('heading',{name:`Recommended supplier approved — version ${process.env.SDSS_BROWSER_AUTH_ONLY?'2':'4'}`,exact:true})).toBeVisible();
+   await expect(page.getByText('Confirmed by Browser approver (browser-approver)',{exact:false})).toBeVisible();
+   await page.getByRole('button',{name:'View Decision Report',exact:true}).click();
+   await pdf(page,'test-results/live-approver-report.pdf');
+   expect(await (await request.get(reportApi(manualReportURL))).json()).toEqual(originalReport);
+   await page.screenshot({path:'test-results/live-approver-report.png',fullPage:true});
+  }
+ }
+ console.log('Account creation, required password changes, role denials and attributed Approver decision verified.');
 });

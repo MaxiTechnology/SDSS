@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('recovery requires explicit copy and save, keeps typed entries on failure and does not calculate early',async({page})=>{
  let fail=true,saves=0;
  let matrix:any={entries:{a:{price:null,quality:null},c:{price:null,quality:null}},suppliers:[{id:'a',name:'Supplier A'},{id:'c',name:'Supplier C'}],criteria:[{id:'price',name:'Price',unit:'USD',direction:'cost',minimum:'0',maximum:null},{id:'quality',name:'Quality',unit:'points / 100',direction:'benefit',minimum:'0',maximum:'100'}],context:'x'.repeat(64),revision:3,needs_review:true,ready:false,recovery:{count:2,available:true,entries:{a:{price:'100',quality:'90'},c:{price:null,quality:null}}}};

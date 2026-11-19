@@ -706,3 +706,6 @@ aside { overflow-y: auto; }
 }
 
 .project-form p, .project-form li, .project-form summary { overflow-wrap: anywhere; }
+
+/* Sign-in and shared workspace accounts */
+.auth-page{max-width:560px;margin:5vh auto;padding:20px}.auth-page .project-form{padding:28px}.auth-page fieldset{border:0;padding:0;min-width:0}.auth-page label,.account-editor label{display:block;margin:16px 0}.auth-page input,.account-editor input,.account-editor select{display:block;width:100%;margin-top:8px}.account-editor{margin-top:24px;padding:24px}.account-editor .inline-check{display:flex;align-items:center;gap:10px}.account-editor input[type=checkbox]{width:18px;margin:0}.session-actions{display:flex;gap:8px;flex-wrap:wrap}.workspace>header{height:auto;min-height:72px;flex-wrap:wrap;padding-top:12px;padding-bottom:12px;gap:12px}.role-view{border:0;padding:0;margin:0;min-width:0}.role-view:disabled{opacity:1}.auth-page .actions{flex-wrap:wrap}@media(max-width:900px){.workspace>header .global-search{flex-basis:100%;max-width:none}.workspace>header .user{display:block}.session-actions button{padding:8px}.auth-page{margin:0 auto;padding:12px}}

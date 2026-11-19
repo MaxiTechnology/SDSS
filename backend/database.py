@@ -222,6 +222,32 @@ def migrate(connection):
                 INSERT INTO sdss_migrations(version) VALUES (13)
             """)
 
+        if not connection.execute("SELECT 1 FROM sdss_migrations WHERE version = 14").fetchone():
+            connection.execute("""
+                CREATE TABLE auth_users (
+                    id uuid PRIMARY KEY, username varchar(80) UNIQUE NOT NULL CHECK (username=lower(username)),
+                    display_name varchar(100) NOT NULL, role text NOT NULL CHECK (role IN ('administrator','officer','approver')),
+                    password_hash text NOT NULL, active boolean NOT NULL DEFAULT true,
+                    must_change boolean NOT NULL DEFAULT true,
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+                );
+                CREATE TABLE auth_sessions (
+                    token_hash varchar(64) PRIMARY KEY, user_id uuid NOT NULL REFERENCES auth_users(id),
+                    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+                    last_seen timestamptz NOT NULL DEFAULT clock_timestamp(), expires_at timestamptz NOT NULL
+                );
+                CREATE INDEX auth_sessions_user_idx ON auth_sessions(user_id);
+                CREATE TABLE auth_login_limits (
+                    key varchar(64) PRIMARY KEY, failures integer NOT NULL,
+                    window_started timestamptz NOT NULL, blocked_until timestamptz
+                );
+                ALTER TABLE supplier_reviews ADD COLUMN reviewer_id uuid REFERENCES auth_users(id);
+                ALTER TABLE project_decisions ADD COLUMN actor_id uuid REFERENCES auth_users(id);
+                ALTER TABLE supplier_evidence ADD COLUMN uploaded_by_id uuid REFERENCES auth_users(id);
+                INSERT INTO sdss_migrations(version) VALUES (14)
+            """)
+
 if __name__ == "__main__":
     try:
         with connect() as connection:

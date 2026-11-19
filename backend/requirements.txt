@@ -3,3 +3,4 @@ uvicorn
 psycopg[binary]
 reportlab==4.4.10
 pypdf==6.7.5
+argon2-cffi==25.1.0

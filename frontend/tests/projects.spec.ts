@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 test("save failure preserves entries, retry and reopen survive refresh", async ({
   page,
 }) => {

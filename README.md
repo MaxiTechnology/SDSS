@@ -21,7 +21,7 @@ Manual weighting supports saved drafts, two-decimal percentage inputs, equal dis
 
 Supplier eligibility review saves Passed/Pending/Failed determinations and required notes for passed or failed mandatory checks. A configured maximum total price is checked automatically; equality is allowed, and missing price stays Pending. Only fully eligible suppliers count toward the minimum pool of two. With no mandatory requirements or price limit, suppliers qualify without checks. Criteria, supplier or currency changes require affected reviews to be repeated. Saves reject stale edits and support safe retries.
 
-Review decisions are attributed to Demo User (unauthenticated), with a saved timestamp. Evidence documents can be uploaded and retained with historical decisions. Authenticated reviewers and immutable audit history are still pending; SDSS-011 is not fully complete. These demonstration reviews must use synthetic data.
+New reviews record the signed-in reviewer and timestamp. Historical Demo User records keep their original attribution. Evidence documents are retained with historical decisions. Use synthetic data; this is not a tamper-proof audit system. See docs/login-and-permissions.md for account setup and role permissions.
 
 ## Set up on another computer
 
@@ -107,7 +107,7 @@ Continue to Final Decision from current rankings. Approve the unique highest-ran
 
 Migration 8 adds decision storage. Each confirmation atomically stores the calculation snapshot, project details, supplier selection or no award, reasons, version, server-assigned demonstration actor, and time. Rankings and simulation weights are unchanged. Confirmed records are append-only through the API. A deliberate revision requires a revision reason and the current version; previous versions remain visible. Concurrent or stale confirmations are rejected. Repeating the same request identifier returns the original record; changing its content is rejected. Changed evaluation inputs mark the previous decision as needing review, rather than erasing it. Recalculation is required before a new confirmation. Project list workflow statuses and reports are separate backlog tickets.
 
-This is an unauthenticated demonstration, not live purchasing authorization or a tamper-proof audit system. Use synthetic data. Database credentials remain local and excluded from GitHub. Browser tests cover required explanations, retry identity, confirmation locking, revision, deferral and reopening; database tests cover snapshots, eligibility selection, versions, stale inputs and duplicate confirmations.
+This is a signed-in synthetic-data demonstration, not live purchasing authorization or a tamper-proof audit system. Use synthetic data. Database credentials remain local and excluded from GitHub. Browser tests cover required explanations, retry identity, confirmation locking, revision, deferral and reopening; database tests cover snapshots, eligibility selection, versions, stale inputs and duplicate confirmations.
 
 
 ## Saved decision reports and PDF (SDSS-016)
@@ -162,7 +162,7 @@ Cloudflare Workers AI uses @cf/meta/llama-3.3-70b-instruct-fp8-fast. The backend
 
 Migration 10 adds immutable AI suggestions, editable drafts, append-only draft/approval versions and the AI weighting source. Network generation runs outside project transactions; context and draft revision are rechecked afterwards. Successful requests are idempotent by request ID. A suggestion request stores an unapproved draft but leaves current approved weights alone. Users can adjust weights, add review notes and explicitly approve at exactly 100%. Editing and saving a currently approved AI draft removes its approval; exploring a new suggestion does not replace older active weights until approval. Switching methods checks the shared weight revision and invalidates affected calculations. Changes to category or criteria make AI context stale. Saved decision reports remain historical snapshots.
 
-New confirmed decisions record provider/model, transmitted priorities/context, original weights/explanations, applied weights, review notes and the demonstration reviewer. Screen and PDF reports distinguish original suggestions from approved values. Secrets stay in the ignored local settings file and are never returned by application APIs. This remains an unauthenticated synthetic-data demonstration.
+New confirmed decisions record provider/model, transmitted priorities/context, original weights/explanations, applied weights, review notes and the signed-in reviewer (legacy snapshots retain the demonstration reviewer). Screen and PDF reports distinguish original suggestions from approved values. Secrets stay in the ignored local settings file and are never returned by application APIs. This remains a synthetic-data demonstration; new approvals require a permitted signed-in account.
 
 Verification: strict output/schema tests, context allowlist checks, structured-provider-response regression, browser consent/unavailable retry/edits/total gate/approval/reload, and an isolated Neon API journey covering method switches, draft history, cross-project ownership, stale/concurrent requests, released network locks and report stability. A live Cloudflare request using synthetic two-criterion context returned a validated suggestion. AHP and the user's saved project/decision were not changed by verification. Restart the backend after migrating to load the new routes.
 
@@ -208,7 +208,7 @@ Review every copied value before saving. A reset restores the blank current draf
 Dashboard and Purchasing Projects remain reachable in the phone navigation. Wide tables scroll inside named regions: swipe horizontally, or focus the region with Tab and use arrow keys. Project and criteria forms stack, action groups wrap, and supplier review dialogs remain vertically scrollable. Viewport checks cover 375 px phone and 768 px tablet widths, plus existing desktop page tests. Physical-device/mobile-browser and comprehensive accessibility checks remain outstanding.
 
 
-Latest complete regression checkpoint (2026-11-18): 67 backend tests passed with all opt-in cloud integrations enabled, and 20 browser tests passed. The cloud suite uses isolated schemas and synthetic AI responses; browser page tests mock APIs. See docs/release-1-checklist.md and docs/manual-workflow-verification.md for scope, user acceptance and outstanding release work.
+Earlier complete regression checkpoint (2026-11-18): 67 backend tests passed with all opt-in cloud integrations enabled, and 20 browser tests passed. The cloud suite uses isolated schemas and synthetic AI responses; browser page tests mock APIs. See docs/release-1-checklist.md and docs/manual-workflow-verification.md for scope, user acceptance and outstanding release work.
 
 
 ## Opt-in browser journey against cloud storage
@@ -228,3 +228,12 @@ Services and the isolated schema are removed in finally cleanup after success or
 
 
 On 2026-11-19, all three real-browser/cloud journeys passed (manual, AHP, AI workflow with synthetic provider). The AI journey exposed and verified a fix for late initial responses clearing unsaved priorities. AHP/AI loading/history now ignore stale responses; two delayed-response regression cases and the existing two weighting page tests passed. Production build passed.
+
+
+## Login and shared workspace permissions
+
+Administrator, Procurement Officer and Approver roles are enforced by the backend. New reviews and decisions record the account identity; existing projects and historical Demo User reports are preserved. The first administrator is created privately with `Create administrator.cmd`, with no default credentials. See [login setup and permissions](docs/login-and-permissions.md). The browser/cloud runner now includes a fourth journey covering real account creation, mandatory password changes, role denials and an Approver-confirmed decision.
+
+For a focused account-permission rerun, append `--accounts` to the browser-runner command. It executes the manual setup journey followed by the account/Approver journey, in a new isolated schema; the default command still runs all four journeys. Page-test artifacts and live-test artifacts use separate folders so one runner cannot erase another runner's trace files.
+
+Login checkpoint (2026-11-19): 69 backend checks passed; 26 browser page checks and the new account-screen check passed. Signed-in manual/AHP/AI journeys and a focused manual/account rerun passed. Combined-run details and cleanup are recorded in docs/manual-workflow-verification.md. The local database migration preserved existing procurement records; first Administrator creation requires private user setup and restarting the older backend process.

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('supplier records persist through reload, edits and removal; failed saves retain entries', async ({page}) => {
  const project={id:'p1',reference:'PRJ-TEST',name:'Test project',currency:'USD',category:'',budget:null,target_date:null,description:'',status:'Draft',updated_at:'2026-11-16T10:00:00Z'};
  let rows:any[]=[]; let fail=true;

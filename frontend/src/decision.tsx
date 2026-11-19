@@ -1,27 +1,30 @@
+import {useAuth} from './auth';
 import {useEffect,useState} from 'react';
 import {api} from './api';
 import type {Run} from './rankings';
 type Decision={id:string;ranking_id:string;version:number;stale:boolean;actor:string;created_at:string;snapshot:{action:string;supplier:{name:string;rank:number;score:string}|null;reason:string;revision_reason:string}};
 const labels:Record<string,string>={approve:'Recommended supplier approved',alternative:'Alternative supplier approved',defer:'Purchase deferred'};
 export function FinalDecision({projectId}:{projectId:string}){
+ const canApprove=useAuth().user.role!=='officer';
  const [run,setRun]=useState<Run|null>(null),[history,setHistory]=useState<Decision[]>([]),[loaded,setLoaded]=useState(false),[editing,setEditing]=useState(false);
  const [action,setAction]=useState('approve'),[supplier,setSupplier]=useState(''),[reason,setReason]=useState(''),[revisionReason,setRevisionReason]=useState(''),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [requestId,setRequestId]=useState(()=>crypto.randomUUID());
  useEffect(()=>{Promise.all([api<Run>(`/api/projects/${projectId}/rankings`),api<{decisions:Decision[]}>(`/api/projects/${projectId}/decisions`)]).then(([r,h])=>{setRun(r);if(r.snapshot.result.rows.filter(row=>row.rank===1).length!==1)setAction('alternative');setHistory(h.decisions);setLoaded(true);}).catch(e=>setError(e.message));},[projectId]);
  const latest=history[0],rows=run?.snapshot.result.rows||[],leaders=rows.filter(r=>r.rank===1),unique=leaders.length===1;
- const canEdit=loaded&&run&&!run.stale&&(!latest||editing);
+ const canEdit=canApprove&&loaded&&run&&!run.stale&&(!latest||editing);
  function change(){setConfirmed(false);setRequestId(crypto.randomUUID());}
  async function save(){if(!run)return;setBusy(true);setError('');try{
   const saved=await api<Decision>(`/api/projects/${projectId}/decisions`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:requestId,ranking_id:run.id,expected_version:latest?.version||0,action,supplier_id:action==='defer'?null:action==='approve'?leaders[0]?.id:supplier,reason,revision_reason:revisionReason,confirmed})});
   setHistory([saved,...history]);setEditing(false);setConfirmed(false);setReason('');setRevisionReason('');setRequestId(crypto.randomUUID());
  }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
- return <section className="supplier-page decision-page"><h2>Final Purchasing Decision</h2><p className="info">Local demonstration: confirmations are recorded as Demo User (unauthenticated). A simulation does not change the approved ranking or award a supplier.</p>
+ return <section className="supplier-page decision-page"><h2>Final Purchasing Decision</h2><p className="info">Confirmations record your signed-in identity. A simulation does not change the approved ranking or award a supplier.</p>
+ {!canApprove&&<p className="info">An Approver or Administrator must confirm the final decision.</p>}
  {error&&<p role="alert" className="error">{error}</p>}
  {run?.stale&&<p role="alert" className="error">Rankings are out of date. Review inputs and calculate again before confirming a decision.</p>}
  {latest&&<article><h3>{labels[latest.snapshot.action]} — version {latest.version}</h3>{latest.stale&&<p className="error">This historical decision needs review because the evaluation has changed.</p>}
  <p>{latest.snapshot.supplier?`Selected supplier: ${latest.snapshot.supplier.name}`:'No supplier was awarded.'}</p><p>{latest.snapshot.reason}</p><p>Confirmed by {latest.actor} on {new Date(latest.created_at).toLocaleString()}.</p>
  <p><button className="primary" onClick={()=>location.hash=`/projects/${projectId}/reports/${latest.id}`}>View Decision Report</button></p>
- {!editing&&<button className="secondary" disabled={!run||run.stale} onClick={()=>{setEditing(true);change();}}>Create a decision revision</button>}</article>}
+ {canApprove&&!editing&&<button className="secondary" disabled={!run||run.stale} onClick={()=>{setEditing(true);change();}}>Create a decision revision</button>}</article>}
  {canEdit&&<fieldset disabled={busy} style={{border:0,padding:0}}><legend>{latest?'Revise confirmed decision':'Choose your decision'}</legend>
  <p>{unique?`Highest-ranked supplier: ${leaders[0].name}.`:'The highest score is tied. Select a supplier and explain your choice.'}</p>
  <label>Decision<select aria-label="Decision" value={action} onChange={e=>{setAction(e.target.value);change();}}><option value="approve" disabled={!unique}>Approve recommended supplier</option><option value="alternative">Choose another supplier / resolve a tie</option><option value="defer">Defer purchase</option></select></label>

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('scenario total, retry, comparison, reset and stale baseline',async({page})=>{
  let stale=false,fail=true;
  const rows=[{id:'a',name:'Alpha',rank:1,score:'0.75'},{id:'b',name:'Beta',rank:2,score:'0.25'}];

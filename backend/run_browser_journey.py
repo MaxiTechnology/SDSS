@@ -5,6 +5,7 @@ import socket
 import shutil
 import subprocess
 import sys
+import secrets
 import time
 from pathlib import Path
 from urllib.request import urlopen
@@ -28,6 +29,9 @@ def serve(schema):
     database.connect=isolated
     # Substitute only the provider boundary, inside this isolated test process.
     # Parsing, consent, persistence and approval still run through the real API.
+    os.environ["SDSS_ALLOWED_ORIGINS"]="http://127.0.0.1:5174,http://127.0.0.1:8001"
+    import auth
+    auth.bootstrap_administrator("browser-admin","Browser Administrator",os.environ["SDSS_BROWSER_TEST_PASSWORD"])
     import json,cloudflare_ai
     fixture={'calls':0}
     cloudflare_ai.settings=lambda:{'synthetic_browser_fixture':True}
@@ -49,7 +53,7 @@ def serve(schema):
     uvicorn.run(app,host='127.0.0.1',port=BACKEND_PORT,log_level='warning')
 
 
-def run():
+def run(auth_only=False):
     if os.environ.get('SDSS_RUN_BROWSER_DATABASE_TESTS')!='1':
         print('Set SDSS_RUN_BROWSER_DATABASE_TESTS=1 to opt into isolated cloud browser tests.')
         return 2
@@ -70,14 +74,15 @@ def run():
             connection.execute(sql.SQL('SET search_path TO {}').format(sql.Identifier(schema)))
             database.migrate(connection)
         print('Created isolated browser test storage. Starting test services.',flush=True)
+        os.environ['SDSS_BROWSER_TEST_PASSWORD']=secrets.token_urlsafe(32)
         with (output/'live-backend.log').open('w',encoding='utf-8') as log:
             process=subprocess.Popen([sys.executable,str(Path(__file__).resolve()),'--serve',schema],cwd=ROOT/'backend',stdout=log,stderr=log,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
             for _ in range(100):
                 if process.poll() is not None:raise RuntimeError('Test backend failed to start; see ignored test log.')
                 try:
                     import json
-                    with urlopen(f'http://127.0.0.1:{BACKEND_PORT}/api/test-isolation',timeout=1) as response:
-                        if json.load(response).get('schema')==schema:break
+                    with urlopen(f'http://127.0.0.1:{BACKEND_PORT}/api/health',timeout=1) as response:
+                        if response.status==200:break
                 except OSError:pass
                 time.sleep(.2)
             else:raise RuntimeError('Test backend did not become ready.')
@@ -87,21 +92,24 @@ def run():
             for _ in range(100):
                 if vite.poll() is not None:raise RuntimeError('Test frontend failed to start; existing services were not reused.')
                 try:
-                    with urlopen('http://127.0.0.1:5174/api/test-isolation',timeout=1) as response:
-                        if json.load(response).get('schema')==schema:break
+                    with urlopen('http://127.0.0.1:5174/api/health',timeout=1) as response:
+                        if response.status==200:break
                 except OSError:pass
                 time.sleep(.2)
             else:raise RuntimeError('Test frontend did not become ready.')
-            env={**os.environ,'SDSS_BROWSER_TEST_SCHEMA':schema}
+            env={**os.environ,'SDSS_BROWSER_TEST_SCHEMA':schema,'SDSS_BROWSER_AUTH_ONLY':'1' if auth_only else ''}
             command=[node,str(ROOT/'frontend/node_modules/@playwright/test/cli.js'),'test','--config','playwright.live.config.ts']
+            if auth_only:command.extend(['--grep','real browser journey|real account roles'])
             result=subprocess.run(command,cwd=ROOT/'frontend',env=env)
             if result.returncode==0:
                 from pypdf import PdfReader
                 checks={
+                    'live-approver-report.pdf':('Browser approver (browser-approver)','signed-in account'),
                     'live-report.pdf':('Browser Supplier A','Mandatory maximum price: 110','Browser cost emphasis','synthetic-A.txt','synthetic-C.txt'),
                     'live-ahp-report.pdf':('AHP pairwise weighting (approved)','AHP consistency','CR: 0.000000','Browser Supplier A'),
                     'live-ai-report.pdf':('AI-assisted weighting (approved)','synthetic-browser-fixture','Synthetic rationale for price','Original AI weight: 40.00%','Approved weight: 45.00%'),
                 }
+                if auth_only:checks={k:v for k,v in checks.items() if k in ('live-report.pdf','live-approver-report.pdf')}
                 for filename,expected_values in checks.items():
                     text='\n'.join(page.extract_text() for page in PdfReader(output/filename).pages)
                     for expected in expected_values:
@@ -125,7 +133,7 @@ def run():
 if __name__=='__main__':
     if len(sys.argv)==3 and sys.argv[1]=='--serve':serve(sys.argv[2])
     else:
-        try:raise SystemExit(run())
+        try:raise SystemExit(run(auth_only=sys.argv[1:]==['--accounts']))
         except (database.psycopg.Error,OSError,RuntimeError):
             print('Browser test setup or cleanup failed. Check local test ports and private database settings; credentials were not printed.')
             raise SystemExit(1) from None

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('AHP incomplete, inconsistent, save retry, approval and reopening',async({page})=>{
  let fail=true;
  const criteria=[{id:'a',name:'Price'},{id:'b',name:'Quality'},{id:'c',name:'Delivery'}];

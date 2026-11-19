@@ -3,13 +3,32 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Response, Request, Query
+from fastapi import FastAPI, HTTPException, Response, Request, Query, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 import database
 import psycopg
+import auth
 
-app = FastAPI(title="SDSS API")
+app = FastAPI(title="SDSS API",dependencies=[Depends(auth.authorize)])
+app.include_router(auth.router)
+
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+@app.exception_handler(RequestValidationError)
+async def safe_validation(request,error):
+    if request.url.path.startswith('/api/auth/'):
+        return JSONResponse(status_code=422,content={'detail':'Check the account fields. Passwords must be 15–128 characters when creating or changing them.'})
+    return await request_validation_exception_handler(request,error)
+
+@app.middleware('http')
+async def private_api_responses(request,call_next):
+    response=await call_next(request)
+    if request.url.path.startswith('/api/'):
+        response.headers['Cache-Control']='no-store'
+        response.headers['X-Content-Type-Options']='nosniff'
+    return response
+
 
 
 @app.get("/api/health")
@@ -452,15 +471,15 @@ def save_eligibility(project_id: UUID, supplier_id: UUID, payload: EligibilityRe
         files=connection.execute(f'SELECT {COLUMNS} FROM supplier_evidence WHERE project_id=%s AND supplier_id=%s AND archived_at IS NULL ORDER BY created_at,id',(project_id,supplier_id)).fetchall()
         if files:determinations['evidence_files']=[metadata(f) for f in files]
         review = connection.execute('SELECT * FROM supplier_reviews WHERE supplier_id=%s FOR UPDATE', (supplier_id,)).fetchone()
-        if review and review['criteria_revision'] == payload.criteria_revision and review['supplier_updated_at'] == supplier['updated_at'] and review.get('evidence_revision',0) == supplier.get('evidence_revision',0) and review['determinations'] == determinations:
+        if review and review['criteria_revision'] == payload.criteria_revision and review['supplier_updated_at'] == supplier['updated_at'] and review.get('evidence_revision',0) == supplier.get('evidence_revision',0) and review['determinations'] == determinations and str(review.get('reviewer_id'))==str(auth.actor_id()):
             return eligibility_supplier(supplier, review, criteria)
         if payload.expected_revision != (review['revision'] if review else 0):
             raise HTTPException(409, 'Review changed in another window. Reload before saving. Your entries are kept.')
-        review = connection.execute('''INSERT INTO supplier_reviews(supplier_id,determinations,criteria_revision,supplier_updated_at,evidence_revision,revision)
-            VALUES (%s,%s,%s,%s,%s,1) ON CONFLICT(supplier_id) DO UPDATE SET determinations=EXCLUDED.determinations,
+        review = connection.execute('''INSERT INTO supplier_reviews(supplier_id,determinations,criteria_revision,supplier_updated_at,evidence_revision,revision,reviewer,reviewer_id)
+            VALUES (%s,%s,%s,%s,%s,1,%s,%s) ON CONFLICT(supplier_id) DO UPDATE SET determinations=EXCLUDED.determinations,
             criteria_revision=EXCLUDED.criteria_revision,supplier_updated_at=EXCLUDED.supplier_updated_at,evidence_revision=EXCLUDED.evidence_revision,
-            revision=supplier_reviews.revision+1,updated_at=clock_timestamp() RETURNING *''',
-            (supplier_id,Jsonb(determinations),payload.criteria_revision,supplier['updated_at'],payload.evidence_revision)).fetchone()
+            reviewer=EXCLUDED.reviewer,reviewer_id=EXCLUDED.reviewer_id,revision=supplier_reviews.revision+1,updated_at=clock_timestamp() RETURNING *''',
+            (supplier_id,Jsonb(determinations),payload.criteria_revision,supplier['updated_at'],payload.evidence_revision,auth.actor_label(),auth.actor_id())).fetchone()
         touch_project(connection, project_id)
     return eligibility_supplier(supplier, review, criteria)
 
@@ -482,11 +501,11 @@ def save_manual_weights(project_id: UUID, payload: ManualWeightsSave):
             return weights_json(row, criteria)
         if payload.expected_revision != revision:
             raise HTTPException(409, "Weights changed in another window. Your entries are kept. Reload saved weights before editing again.")
-        row = connection.execute("""INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved)
-            VALUES (%s,%s,%s,1,%s) ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,
+        row = connection.execute("""INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved,provenance)
+            VALUES (%s,%s,%s,1,%s,%s) ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,
             criteria_revision=EXCLUDED.criteria_revision,revision=project_weights.revision+1,
-            approved=EXCLUDED.approved,method='manual',provenance='{}'::jsonb,updated_at=clock_timestamp() RETURNING *""",
-            (project_id,Jsonb(values),payload.criteria_revision,payload.approved)).fetchone()
+            approved=EXCLUDED.approved,method='manual',provenance=EXCLUDED.provenance,updated_at=clock_timestamp() RETURNING *""",
+            (project_id,Jsonb(values),payload.criteria_revision,payload.approved,Jsonb({'reviewer':auth.actor_label(),'reviewer_id':auth.actor_id(),'reviewed_at':datetime.now(timezone.utc).isoformat()} if payload.approved else {}))).fetchone()
         touch_project(connection, project_id)
     return weights_json(row, criteria)
 
@@ -722,7 +741,7 @@ def save_scenario(project_id:UUID,payload:ScenarioSave):
         result=sensitivity_result(connection,project_id,payload)
         count=connection.execute('SELECT count(*) AS total FROM sensitivity_scenarios WHERE project_id=%s AND baseline_id=%s',(project_id,payload.baseline_id)).fetchone()['total']
         if count>=20:raise HTTPException(422,'Up to 20 scenarios can be saved for one baseline ranking.')
-        snapshot={**result,'name':payload.name,'notes':payload.notes,'actor':'Demo User (unauthenticated)'}
+        snapshot={**result,'name':payload.name,'notes':payload.notes,'actor':auth.actor_label(),'actor_id':auth.actor_id()}
         row=connection.execute('INSERT INTO sensitivity_scenarios(id,project_id,baseline_id,request,snapshot) VALUES (%s,%s,%s,%s,%s) RETURNING *',(payload.id,project_id,payload.baseline_id,Jsonb(request),Jsonb(snapshot))).fetchone()
         return scenario_json(row)
 
@@ -789,7 +808,7 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
         require_project(connection, project_id)
         duplicate = connection.execute('SELECT * FROM project_decisions WHERE id=%s', (payload.id,)).fetchone()
         if duplicate:
-            if duplicate['project_id'] != project_id or duplicate['request'] != request:
+            if duplicate['project_id'] != project_id or duplicate['request'] != request or str(duplicate.get('actor_id')) != str(auth.actor_id()):
                 raise HTTPException(409, 'This confirmation identifier was already used. Reload the decision.')
             return decision_json(duplicate, decision_current(connection, project_id, duplicate['ranking_id']))
         latest = connection.execute('SELECT * FROM project_decisions WHERE project_id=%s ORDER BY version DESC LIMIT 1', (project_id,)).fetchone()
@@ -814,6 +833,8 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
         criteria, eligible, _, _ = matrix_context(connection, project_id)
         scenarios=connection.execute('SELECT * FROM sensitivity_scenarios WHERE project_id=%s AND baseline_id=%s ORDER BY created_at,id',(project_id,payload.ranking_id)).fetchall()
         snapshot['sensitivity_scenarios']=[scenario_json(r) for r in scenarios]
+        snapshot['actor_id']=auth.actor_id()
+        snapshot['actor_role']=auth.actor()['role']
         snapshot['reference'] = f"PRJ-{project['project_number']:06d}"
         active_weights = connection.execute('SELECT method,provenance FROM project_weights WHERE project_id=%s', (project_id,)).fetchone()
         snapshot['weight_method'] = {'ahp':'AHP pairwise weighting (approved)','ai':'AI-assisted weighting (approved)','manual':'Manual percentage weighting (approved)'}[active_weights['method']]
@@ -823,9 +844,9 @@ def confirm_decision(project_id: UUID, payload: DecisionRequest):
         evidence_rows=connection.execute(f'SELECT {COLUMNS} FROM supplier_evidence WHERE project_id=%s AND archived_at IS NULL ORDER BY created_at,id',(project_id,)).fetchall()
         eligible_ids={s['id'] for s in eligible}
         snapshot['evidence_files']=[metadata(f) for f in evidence_rows if str(f['supplier_id']) in eligible_ids]
-        row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor)
-            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
-            (payload.id, project_id, payload.ranking_id, payload.expected_version + 1, Jsonb(request), Jsonb(snapshot), 'Demo User (unauthenticated)')).fetchone()
+        row = connection.execute('''INSERT INTO project_decisions(id,project_id,ranking_id,version,request,snapshot,actor,actor_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
+            (payload.id, project_id, payload.ranking_id, payload.expected_version + 1, Jsonb(request), Jsonb(snapshot), auth.actor_label(),auth.actor_id())).fetchone()
         return decision_json(row, True)
 
 
@@ -936,7 +957,7 @@ def save_ahp(project_id: UUID, payload: AhpSave):
             revision=project_ahp.revision+1,updated_at=clock_timestamp() RETURNING *''',
             (project_id,Jsonb(payload.judgments),payload.criteria_revision)).fetchone()
         if payload.approved:
-            provenance={'ahp_revision':draft['revision'],'judgments':payload.judgments,'result':result}
+            provenance={'ahp_revision':draft['revision'],'judgments':payload.judgments,'result':result,'reviewer':auth.actor_label(),'reviewer_id':auth.actor_id(),'reviewed_at':datetime.now(timezone.utc).isoformat()}
             weights = connection.execute('''INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved,method,provenance)
                 VALUES (%s,%s,%s,1,true,'ahp',%s) ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,
                 criteria_revision=EXCLUDED.criteria_revision,revision=project_weights.revision+1,approved=true,
@@ -946,7 +967,7 @@ def save_ahp(project_id: UUID, payload: AhpSave):
             weights = connection.execute('UPDATE project_weights SET approved=false,revision=revision+1,updated_at=clock_timestamp() WHERE project_id=%s RETURNING *', (project_id,)).fetchone()
         history_result = result or (ahp.calculate([c['id'] for c in selected],payload.judgments) if all(payload.judgments.values()) else None)
         connection.execute('INSERT INTO project_ahp_versions(project_id,revision,snapshot) VALUES (%s,%s,%s)',
-            (project_id,draft['revision'],Jsonb({'criteria':selected,'criteria_revision':criteria['revision'],'judgments':payload.judgments,'result':history_result,'approved':payload.approved})))
+            (project_id,draft['revision'],Jsonb({'criteria':selected,'criteria_revision':criteria['revision'],'judgments':payload.judgments,'result':history_result,'approved':payload.approved,'reviewer':auth.actor_label(),'reviewer_id':auth.actor_id()})))
         touch_project(connection,project_id)
         return ahp_json(criteria,selected,keys,draft,weights)
 
@@ -1006,6 +1027,7 @@ def ai_state(connection,project_id):
 
 
 def record_ai_version(connection,project_id,revision,snapshot):
+    snapshot={**snapshot,'recorded_by':auth.actor_label(),'recorded_by_id':auth.actor_id()}
     from psycopg.types.json import Jsonb
     connection.execute('INSERT INTO project_ai_versions(project_id,revision,snapshot) VALUES (%s,%s,%s)',(project_id,revision,Jsonb(snapshot)))
 
@@ -1073,7 +1095,7 @@ def save_ai_weights(project_id:UUID,payload:AIWeightsSave):
             raise HTTPException(409,'AI draft or active weights changed in another window. Your edits are kept. Reload before saving.')
         revision=draft['revision']+1
         connection.execute('UPDATE project_ai_drafts SET weights=%s,notes=%s,revision=%s,updated_at=clock_timestamp() WHERE project_id=%s',(Jsonb(values),notes,revision,project_id))
-        snapshot={'ai_revision':revision,'suggestion_id':str(payload.suggestion_id),'suggestion':suggestion['snapshot'],'applied_weights':values,'notes':notes,'context':token, 'reviewer':'Demo User (unauthenticated)','reviewed_at':datetime.now(timezone.utc).isoformat() if payload.approved else None}
+        snapshot={'ai_revision':revision,'suggestion_id':str(payload.suggestion_id),'suggestion':suggestion['snapshot'],'applied_weights':values,'notes':notes,'context':token, 'reviewer':auth.actor_label(),'reviewer_id':auth.actor_id(),'reviewed_at':datetime.now(timezone.utc).isoformat() if payload.approved else None}
         if payload.approved:
             connection.execute('''INSERT INTO project_weights(project_id,weights,criteria_revision,revision,approved,method,provenance) VALUES (%s,%s,%s,1,true,'ai',%s)
                 ON CONFLICT(project_id) DO UPDATE SET weights=EXCLUDED.weights,criteria_revision=EXCLUDED.criteria_revision,
@@ -1137,9 +1159,9 @@ def store_evidence(project_id,supplier_id,document_id,filename,criteria_revision
         active=connection.execute('SELECT count(*) AS total FROM supplier_evidence WHERE project_id=%s AND supplier_id=%s AND archived_at IS NULL',(project_id,supplier_id)).fetchone()['total']
         if active>=evidence.MAX_ACTIVE_FILES or usage['used_bytes']+len(content)>evidence.MAX_PROJECT_BYTES or usage['stored_files']>=evidence.MAX_PROJECT_FILES:
             raise HTTPException(422,'Evidence storage limit reached: 10 active files per supplier, 20 MiB and 100 retained files per project. Archived files count toward retained storage.')
-        row=connection.execute(f'''INSERT INTO supplier_evidence(id,project_id,supplier_id,supplier_name,filename,mime_type,size_bytes,sha256,content,check_id,check_name,criteria_revision)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING {evidence.COLUMNS}''',
-            (document_id,project_id,supplier_id,supplier['name'],filename,mime,len(content),digest,content,check_id,checks[check_id]['name'] if check_id else None,criteria_revision)).fetchone()
+        row=connection.execute(f'''INSERT INTO supplier_evidence(id,project_id,supplier_id,supplier_name,filename,mime_type,size_bytes,sha256,content,check_id,check_name,criteria_revision,uploaded_by,uploaded_by_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING {evidence.COLUMNS}''',
+            (document_id,project_id,supplier_id,supplier['name'],filename,mime,len(content),digest,content,check_id,checks[check_id]['name'] if check_id else None,criteria_revision,auth.actor_label(),auth.actor_id())).fetchone()
         connection.execute('UPDATE project_suppliers SET evidence_revision=evidence_revision+1 WHERE id=%s',(supplier_id,))
         touch_project(connection,project_id)
         return {'file':evidence.metadata(row),'evidence_revision':supplier['evidence_revision']+1}

@@ -66,7 +66,7 @@ def test_review_persistence_gates_and_isolation(monkeypatch):
         review={'checks':{'cert':{'status':'passed','notes':'Sample reviewed'}},'total_price':'100','currency':'USD','criteria_revision':1,'supplier_updated_at':first['updated_at'],'expected_revision':0}
         response=client.put(url,json=review)
         assert response.status_code==200,response.text
-        assert response.json()['eligibility']=='eligible' and response.json()['reviewer']=='Demo User (unauthenticated)'
+        assert response.json()['eligibility']=='eligible' and response.json()['reviewer']=='Test Administrator (api-test)'
         assert client.put(url,json=review).json()==response.json()
         assert client.put(url,json={**review,'total_price':'99'}).status_code==409
         assert client.put(url,json={**review,'checks':{}}).status_code==422

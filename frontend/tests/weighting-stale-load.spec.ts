@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 for(const method of ['ai','ahp'])test(`late initial ${method} response cannot erase edits`,async({page})=>{
  let count=0,release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
  const criteria=[{id:'price',name:'Price',unit:'USD',direction:'cost'},{id:'quality',name:'Quality',unit:'points',direction:'benefit'}];

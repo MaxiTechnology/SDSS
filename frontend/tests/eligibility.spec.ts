@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('eligibility cancellation, failed save and persistence',async({page})=>{
 const project={id:'p1',reference:'PRJ-T',name:'Test',currency:'USD',category:'',estimated_budget:null,target_date:null,description:'',status:'Draft',updated_at:'2026-11-16T10:00:00Z'};
 let row:any={id:'s1',name:'Supplier A',updated_at:project.updated_at,checks:{cert:{status:'pending',notes:''}},total_price:null,price_status:'pending',eligibility:'pending',revision:0,needs_review:false,reviewer:null,reviewed_at:null};let fail=true;

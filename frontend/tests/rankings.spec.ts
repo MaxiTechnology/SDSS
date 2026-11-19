@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('rankings calculate from a saved matrix and flag stale snapshots',async({page})=>{
  let stale=false,fail=true;
  const matrix={entries:{a:{x:'3'},b:{x:'1'}},suppliers:[{id:'a',name:'A'},{id:'b',name:'B'}],criteria:[{id:'x',name:'Quality',unit:'points',direction:'benefit',minimum:null,maximum:null}],context:'x'.repeat(64),revision:1,ready:true,needs_review:false};

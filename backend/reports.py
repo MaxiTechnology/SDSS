@@ -63,7 +63,7 @@ def report_data(row):
         'evidence_files': snapshot.get('evidence_files',[]),
         'evidence_note': ('Evidence attachments were not captured in this older decision snapshot.' if 'evidence_files' not in snapshot else 'File metadata below was recorded at confirmation; later file changes do not alter this saved record.' if snapshot['evidence_files'] else 'No evidence attachments were recorded at confirmation.'),
         'sensitivity': sensitivity_text(snapshot),
-        'notice': 'Synthetic-data demonstration. Recorded as an unauthenticated demo user; this is not a purchase order. This report reproduces a saved version and does not certify that it is the latest decision or that current inputs are unchanged.',
+        'notice': ('Synthetic-data demonstration. Recorded by a signed-in account; this is not a purchase order. ' if snapshot.get('actor_id') else 'Synthetic-data demonstration. Recorded as an unauthenticated demo user; this is not a purchase order. ')+'This report reproduces a saved version and does not certify that it is the latest decision or that current inputs are unchanged.',
     }
 
 

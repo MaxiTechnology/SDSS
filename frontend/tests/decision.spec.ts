@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('confirm alternative, retry safely, revise to deferral and preserve history',async({page})=>{
  let decisions:any[]=[],fail=true;const requests:string[]=[];
  const rows=[{id:'11111111-1111-4111-8111-111111111111',name:'Alpha',rank:1,score:'0.75'},{id:'22222222-2222-4222-8222-222222222222',name:'Beta',rank:2,score:'0.25'}];

@@ -1,8 +1,15 @@
+let csrfToken:string|null=null;
+export function setCsrfToken(value:string|null){csrfToken=value;}
+export class ApiError extends Error { constructor(message:string,public status:number){super(message);} }
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   let r: Response;
+  const headers=new Headers(options?.headers);
+  if(csrfToken&&!['GET','HEAD','OPTIONS'].includes((options?.method??'GET').toUpperCase()))headers.set('X-CSRF-Token',csrfToken);
   try {
     r = await fetch(path, {
       ...options,
+      credentials:'same-origin',
+      headers,
       signal: options?.signal ?? AbortSignal.timeout(20000),
     });
   } catch (error) {
@@ -16,12 +23,14 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (!r.ok) {
     const b = await r.json().catch(() => ({}));
-    throw Error(
+    if(r.status===401&&!path.endsWith('/auth/login')&&!path.endsWith('/auth/session'))window.dispatchEvent(new Event('sdss-auth-required'));
+    throw new ApiError(
       typeof b?.detail === "string"
         ? b.detail
         : r.status >= 500
           ? "The server is temporarily unavailable. Check that the backend is running, then try again."
           : "Please check your entries and try again.",
+      r.status,
     );
   }
   if (r.status === 204) return undefined as T;

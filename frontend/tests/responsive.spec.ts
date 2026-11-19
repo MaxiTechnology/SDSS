@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import report from './report-fixture.json' with {type:'json'};
 for(const width of [375,768])test(`navigation, forms, tables and review dialog fit ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:850});

@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('AI consent, unavailable retry, edits, exact total, approval and reload',async({page})=>{
  const criteria=[{id:'price',name:'Price',unit:'USD',direction:'cost'},{id:'quality',name:'Quality',unit:'points',direction:'benefit'}];
  let saved={criteria,criteria_revision:1,context:{category:'IT',criteria},revision:0,weight_revision:1,weights:{price:'0.00',quality:'0.00'},notes:'',suggestion:null as any,approved:false,needs_review:false,active_method:'ahp',configured:true};

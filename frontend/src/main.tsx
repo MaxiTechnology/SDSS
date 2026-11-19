@@ -1,3 +1,5 @@
+import {AuthBoundary,useAuth,roleName} from './auth';
+import {Accounts} from './accounts';
 import { Dashboard, WORKFLOW_STATUSES } from './dashboard';
 import { AIWeighting } from './ai';
 import { AhpWeighting } from './ahp';
@@ -51,6 +53,9 @@ function Icon({ n, list = false }: { n: number; list?: boolean }) {
   );
 }
 function App() {
+  const {user,signOut,changePassword}=useAuth();
+  const canPrepare=user.role!=="approver",canManage=user.role==="administrator";
+  const accountView=location.hash.slice(1)==="/accounts";
   const [route, setRoute] = useState(location.hash.slice(1));
   const [items, setItems] = useState<Project[]>([]);
   const [project, setProject] = useState<Project | null>(null);
@@ -93,6 +98,7 @@ function App() {
     setError("");
     setProject(null);
     try {
+      if (accountView) { setLoading(false); return; }
       if (detail) {
         const p = await api<Project>(`/api/projects/${route.split("/")[2]}`);
         setProject(p);
@@ -183,15 +189,15 @@ function App() {
             "Criteria & Weighting",
             "Evaluations",
             "Reports",
-            "Settings",
+            "User Accounts",
           ].map((v, i) => (
             <button
-              aria-current={(i===0&&dashboardView)||(i===1&&!dashboardView)?"page":undefined}
+              aria-current={(i===0&&dashboardView)||(i===1&&!dashboardView&&!accountView)||(i===6&&accountView)?"page":undefined}
               key={v}
-              disabled={i !== 1 && i !== 0}
-              title={i !== 1 && i !== 0 ? "Available in a later update" : undefined}
-              className={(i===0&&dashboardView)||(i===1&&!dashboardView)?"active":""}
-              onClick={() => go(i===0?"/dashboard":"/")}
+              disabled={i !== 1 && i !== 0 && !(i===6&&canManage)}
+              title={i===6&&!canManage?"Administrator access only":i !== 1 && i !== 0 && i!==6 ? "Available in a later update" : undefined}
+              className={(i===0&&dashboardView)||(i===1&&!dashboardView&&!accountView)||(i===6&&accountView)?"active":""}
+              onClick={() => go(i===0?"/dashboard":i===6?"/accounts":"/")}
             >
               <Icon n={14 + i} />
               {v}
@@ -199,9 +205,9 @@ function App() {
           ))}
         </nav>
         <div className="account">
-          <b>DU</b>
+          <b>{user.display_name.slice(0,2).toUpperCase()}</b>
           <div>
-            Demo User<small>Procurement Officer</small>
+            {user.display_name}<small>{roleName(user.role)}</small>
           </div>
         </div>
       </aside>
@@ -211,12 +217,12 @@ function App() {
             <Icon n={10} />
             Supplier decision workspace
           </div>
-          <span className="demo">DEMO WORKSPACE • SYNTHETIC DATA</span>
-          <b className="avatar">DU</b>
+          <span className="demo">SHARED WORKSPACE</span>
+          <b className="avatar">{user.display_name.slice(0,2).toUpperCase()}</b>
           <div className="user">
-            Demo User<small>Procurement Analyst (Demo)</small>
+            {user.display_name}<small>{roleName(user.role)}</small>
           </div>
-        </header>
+        <div className="session-actions"><button className="secondary" onClick={changePassword}>Change Password</button><button className="secondary" onClick={()=>void signOut()}>Sign Out</button></div></header>
         <main className={formView ? "form-page" : "list-page"}>
           {formView ? (
             <>
@@ -259,17 +265,18 @@ function App() {
           ) : (
             <div className="list-heading">
               <div>
-                <h1>{dashboardView?"Dashboard":"Purchasing Projects"}</h1>
+                <h1>{accountView?"User Accounts":dashboardView?"Dashboard":"Purchasing Projects"}</h1>
                 <p className="subtitle">
-                  {dashboardView?"Track saved projects, current approvals and work needing review.":"Manage multi-criteria supplier evaluation projects and decision workflows."}
+                  {accountView?"Manage accounts and permissions for the shared workspace.":dashboardView?"Track saved projects, current approvals and work needing review.":"Manage multi-criteria supplier evaluation projects and decision workflows."}
                 </p>
               </div>
-              <button className="primary" onClick={() => go("/new")}>
+              {!accountView&&<button className="primary" disabled={!canPrepare} onClick={() => go("/new")}>
                 <Icon n={0} list />
                 Create Project
-              </button>
+              </button>}
             </div>
           )}
+          {!canPrepare&&detail&&<nav className="review-links" aria-label="Review project"><p className="info">Review the shared project. Preparation controls are read-only for Approvers.</p>{[["","Project"],["/suppliers","Suppliers"],["/criteria","Criteria"],["/weights/manual","Weights"],["/eligibility","Eligibility"],["/matrix","Matrix"],["/rankings","Rankings"],["/sensitivity","Scenarios"],["/decision","Final Decision"]].map(([path,label])=><button key={path} className="secondary" onClick={()=>go(`/projects/${route.split("/")[2]}${path}`)}>{label}</button>)}</nav>}
           {notice && (
             <div className="success" role="status">
               {notice}
@@ -281,7 +288,7 @@ function App() {
               {!fresh && !editing && <button onClick={() => void load()}>Try again</button>}
             </div>
           )}
-          {loading ? (
+          {accountView ? <Accounts/> : loading ? (
             <p role="status">Loading projects…</p>
           ) : error && !formView ? (<p role="status">Saved project data could not be refreshed. Use Try again above.</p>) : dashboardView ? (
             <Dashboard onRefresh={()=>void load()} projects={items} onFilter={status=>{setStatusFilter(status);setSearch("");setPage(1);go("/");}} onOpen={p=>{setNotice("");go(p.resume_path||`/projects/${p.id}`);}} onReport={p=>go(`/projects/${p.id}/reports/${p.decision_id}`)} />
@@ -290,23 +297,23 @@ function App() {
           ) : decisionView && project ? (
             <FinalDecision key={project.id} projectId={project.id} />
           ) : sensitivityView && project ? (
-            <Sensitivity key={project.id} projectId={project.id} />
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Sensitivity key={project.id} projectId={project.id} /></fieldset>
           ) : rankingsView && project ? (
             <Rankings key={project.id} projectId={project.id} />
           ) : matrixView && project ? (
-            <EvaluationMatrix key={project.id} projectId={project.id} />
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<EvaluationMatrix key={project.id} projectId={project.id} /></fieldset>
           ) : eligibilityView && project ? (
-            <Eligibility key={project.id} projectId={project.id} />
+            <Eligibility key={project.id} projectId={project.id} readOnly={!canPrepare} />
           ) : aiView && project ? (
-              <AIWeighting key={project.id} projectId={project.id} />
+              <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<AIWeighting key={project.id} projectId={project.id} /></fieldset>
             ) : ahpView && project ? (
-              <AhpWeighting key={project.id} projectId={project.id} />
+              <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<AhpWeighting key={project.id} projectId={project.id} /></fieldset>
             ) : weightingView && project ? (
-            <ManualWeighting key={project.id} projectId={project.id} />
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<ManualWeighting key={project.id} projectId={project.id} /></fieldset>
           ) : criteriaView && project ? (
-            <Criteria key={project.id} projectId={project.id} />
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Criteria key={project.id} projectId={project.id} /></fieldset>
           ) : supplierView && project ? (
-            <Suppliers key={project.id} projectId={project.id} reference={project.reference} />
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Suppliers key={project.id} projectId={project.id} reference={project.reference} /></fieldset>
           ) : formView ? (
             (!detail || project) && (
               <form className="project-form" onSubmit={save}>
@@ -317,7 +324,7 @@ function App() {
                   </h2>
                   <small>* Required fields</small>
                 </div>
-                <fieldset disabled={(detail && !editing) || busy}>
+                <fieldset disabled={!canPrepare || (detail && !editing) || busy}>
                   <div className="fields">
                     <label className="wide">
                       Project Name <em>*</em>
@@ -425,8 +432,8 @@ function App() {
                   >
                     {editing ? "Cancel Editing" : detail ? "← Back to Projects" : "Cancel"}
                   </button>
-                  {detail && !editing && <div className="actions"><button type="button" className="secondary" onClick={() => { setEditing(true); setNotice(""); }}>Edit Project</button><button type="button" className="primary" onClick={() => {setNotice(""); go(`/projects/${project?.id}/suppliers`);}}>Continue to Add Suppliers →</button></div>}
-                  {(!detail || editing) && (
+                  {canPrepare && detail && !editing && <div className="actions"><button type="button" className="secondary" onClick={() => { setEditing(true); setNotice(""); }}>Edit Project</button><button type="button" className="primary" onClick={() => {setNotice(""); go(`/projects/${project?.id}/suppliers`);}}>Continue to Add Suppliers →</button></div>}
+                  {canPrepare && (!detail || editing) && (
                     <button className="primary" disabled={busy}>
                       {busy ? "Saving…" : editing ? "Save Changes" : "Create Project"}
                       <Icon n={9} />
@@ -533,7 +540,7 @@ function App() {
                         : "Create your first purchasing project to get started."}
                     </p>
                     {!items.length && (
-                      <button className="primary" onClick={() => go("/new")}>
+                      <button className="primary" disabled={!canPrepare} onClick={() => go("/new")}>
                         Create Project
                       </button>
                     )}
@@ -571,6 +578,6 @@ function App() {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <AuthBoundary><App /></AuthBoundary>
   </React.StrictMode>,
 );

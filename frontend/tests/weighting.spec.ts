@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('manual weighting draft, exact total, failed save, approval and reopening',async({page})=>{
  const project={id:'p1',reference:'PRJ-T',name:'Test',currency:'USD',category:'',estimated_budget:null,target_date:null,description:'',status:'Draft',updated_at:'2026-11-16T10:00:00Z'};
  let saved:any={criteria:[{id:'price',name:'Price',unit:'USD'},{id:'quality',name:'Quality',unit:'points'},{id:'delivery',name:'Delivery',unit:'days'}],criteria_revision:1,weights:{price:'0',quality:'0',delivery:'0'},revision:0,approved:false,needs_review:false};let fail=true;

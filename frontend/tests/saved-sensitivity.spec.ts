@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 test('saved scenarios retry with same identity, survive reload and remain advisory',async({page})=>{
  const rows=[{id:'a',name:'Alpha',rank:1,score:'0.8'},{id:'b',name:'Beta',rank:2,score:'0.2'}];
  const result={baseline_id:'run',weights:{x:'25',y:'75'},result:{rows:[{...rows[1],rank:1,score:'0.8'},{...rows[0],rank:2,score:'0.2'}]}};
