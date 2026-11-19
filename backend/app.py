@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 import database
 import psycopg
 import auth
+import project_read
 
 from contextlib import asynccontextmanager
 from starlette.concurrency import run_in_threadpool
@@ -319,10 +320,10 @@ def criteria_project(connection, project_id):
 @app.get("/api/projects/{project_id}/criteria")
 def get_criteria(project_id: UUID):
     with database.connect() as connection:
-        project = criteria_project(connection, project_id)
-        row = connection.execute("SELECT * FROM project_criteria WHERE project_id=%s", (project_id,)).fetchone()
-    return {"configuration":row["configuration"] if row else default_criteria(project["currency"]),
-            "revision":row["revision"] if row else 0, "currency":project["currency"]}
+        state=project_read.load(connection,project_id,('suppliers','criteria'))
+    row=state.criteria(saved=False);currency=state.project['currency']
+    return {"configuration":row['configuration'] if row else default_criteria(currency),
+            "revision":row['revision'] if row else 0,"currency":currency}
 
 
 @app.put("/api/projects/{project_id}/criteria")
@@ -386,9 +387,8 @@ def weights_json(row, criteria):
 @app.get("/api/projects/{project_id}/weights/manual")
 def get_manual_weights(project_id: UUID):
     with database.connect() as connection:
-        criteria = weighting_criteria(connection, project_id)
-        row = connection.execute("SELECT * FROM project_weights WHERE project_id=%s", (project_id,)).fetchone()
-    return weights_json(row, criteria)
+        state=project_read.load(connection,project_id,('suppliers','criteria','weights'))
+    return weights_json(state.get('weights'),state.criteria())
 
 
 class CheckReview(BaseModel):
@@ -451,16 +451,13 @@ def eligibility_supplier(supplier, review, criteria):
 @app.get('/api/projects/{project_id}/eligibility')
 def get_eligibility(project_id: UUID):
     with database.connect() as connection:
-        criteria = eligibility_context(connection, project_id)
-        suppliers = connection.execute('SELECT * FROM project_suppliers WHERE project_id=%s ORDER BY created_at,id', (project_id,)).fetchall()
-        reviews = {r['supplier_id']:r for r in connection.execute('SELECT r.* FROM supplier_reviews r JOIN project_suppliers s ON s.id=r.supplier_id WHERE s.project_id=%s', (project_id,)).fetchall()}
-        rows = [eligibility_supplier(s, reviews.get(s['id']), criteria) for s in suppliers]
-        currency = connection.execute('SELECT currency FROM purchasing_projects WHERE id=%s', (project_id,)).fetchone()['currency']
-        weight_method = connection.execute('SELECT method FROM project_weights WHERE project_id=%s',(project_id,)).fetchone()['method']
-    eligible = sum(s['eligibility'] == 'eligible' for s in rows)
-    return {'weight_method':weight_method, 'suppliers':rows, 'mandatory_checks':criteria['configuration']['mandatory_checks'],
-            'maximum_price':criteria['configuration']['maximum_price'], 'currency':currency,
-            'criteria_revision':criteria['revision'], 'eligible_count':eligible, 'ready':eligible >= 2}
+        state=project_read.load(connection,project_id,('suppliers','criteria','weights','reviews'))
+    criteria=state.eligibility();rows=state.eligibility_rows(eligibility_supplier,criteria)
+    eligible=sum(s['eligibility']=='eligible' for s in rows)
+    return {'weight_method':state.get('weights')['method'],'suppliers':rows,
+            'mandatory_checks':criteria['configuration']['mandatory_checks'],
+            'maximum_price':criteria['configuration']['maximum_price'],'currency':state.project['currency'],
+            'criteria_revision':criteria['revision'],'eligible_count':eligible,'ready':eligible>=2}
 
 
 @app.put('/api/projects/{project_id}/eligibility/{supplier_id}')
@@ -595,15 +592,12 @@ def matrix_json(row, criteria, suppliers, selected, context):
 @app.get('/api/projects/{project_id}/matrix')
 def get_matrix(project_id: UUID):
     with database.connect() as connection:
-        criteria,suppliers,selected,context = matrix_context(connection,project_id)
-        row = connection.execute('SELECT * FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
-        # Legacy matrices have no recorded basis. Use only a ranking snapshot of
-        # this exact saved matrix version, never today's criteria as a guess.
-        if row and row['context']!=context and not row.get('input_basis'):
-            legacy=connection.execute('SELECT snapshot FROM ranking_runs WHERE project_id=%s AND context=%s AND matrix_revision=%s LIMIT 1',(project_id,row['context'],row['revision'])).fetchone()
-            if legacy:
-                row={**row,'input_basis':{'currency':legacy['snapshot'].get('currency'),'criteria':legacy['snapshot'].get('criteria',[])}}
-        return matrix_json(row,criteria,suppliers,selected,context)
+        state=project_read.load(connection,project_id,project_read.MATRIX_PARTS+('legacy_basis',))
+    criteria,suppliers,selected,context=state.matrix_context(eligibility_supplier)
+    row=state.get('matrix')
+    if row and row['context']!=context and not row.get('input_basis') and state.get('legacy_basis') is not None:
+        row={**row,'input_basis':state.get('legacy_basis')}
+    return matrix_json(row,criteria,suppliers,selected,context)
 
 
 @app.put('/api/projects/{project_id}/matrix')
@@ -665,18 +659,14 @@ def create_ranking(project_id: UUID, payload: RankingRequest):
 @app.get('/api/projects/{project_id}/rankings')
 def get_ranking(project_id: UUID):
     with database.connect() as connection:
-        # Preserve access to historical snapshots even when the current pool is no longer ready.
-        project = connection.execute('SELECT id FROM purchasing_projects WHERE id=%s FOR UPDATE',(project_id,)).fetchone()
-        if not project: raise HTTPException(404,'Project not found.')
-        row = connection.execute('SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',(project_id,)).fetchone()
-        if not row: raise HTTPException(404,'No rankings yet. Complete the matrix and calculate rankings.')
-        try:
-            _,_,_,context = matrix_context(connection,project_id)
-            matrix = connection.execute('SELECT revision FROM project_matrix WHERE project_id=%s',(project_id,)).fetchone()
-            revision = matrix['revision'] if matrix else 0
-        except HTTPException:
-            context,revision = '',0
-        return ranking_json(row,context,revision)
+        state=project_read.load(connection,project_id,project_read.MATRIX_PARTS+('run',))
+    row=state.get('run')
+    if not row:raise HTTPException(404,'No rankings yet. Complete the matrix and calculate rankings.')
+    try:
+        _,_,_,context=state.matrix_context(eligibility_supplier)
+        matrix=state.get('matrix');revision=matrix['revision'] if matrix else 0
+    except HTTPException:context,revision='',0
+    return ranking_json(row,context,revision)
 
 
 class SensitivityRequest(BaseModel):
@@ -804,10 +794,15 @@ def decision_json(row, current):
 @app.get('/api/projects/{project_id}/decisions')
 def get_decisions(project_id: UUID):
     with database.connect() as connection:
-        require_project(connection, project_id)
-        rows = connection.execute('SELECT * FROM project_decisions WHERE project_id=%s ORDER BY version DESC', (project_id,)).fetchall()
-        current = decision_current(connection, project_id, rows[0]['ranking_id']) if rows else False
-        return {'decisions': [decision_json(row, current if index == 0 else False) for index, row in enumerate(rows)]}
+        state=project_read.load(connection,project_id,project_read.MATRIX_PARTS+('run_head','history'))
+    rows=state.get('history');current=False
+    if rows:
+        try:
+            _,_,_,context=state.matrix_context(eligibility_supplier)
+            run=state.get('run_head');matrix=state.get('matrix')
+            current=bool(run and run['id']==rows[0]['ranking_id'] and matrix and run['context']==context and run['matrix_revision']==matrix['revision'])
+        except HTTPException:pass
+    return {'decisions':[decision_json(row,current if index==0 else False) for index,row in enumerate(rows)]}
 
 
 @app.post('/api/projects/{project_id}/decisions')
@@ -931,8 +926,13 @@ def validate_ahp(payload, criteria, keys):
 
 @app.get('/api/projects/{project_id}/weights/ahp')
 def get_ahp(project_id: UUID):
+    import ahp
     with database.connect() as connection:
-        return ahp_json(*ahp_context(connection, project_id))
+        state=project_read.load(connection,project_id,('suppliers','criteria','weights','ahp'))
+    criteria=state.criteria();selected=[c for c in criteria['configuration']['criteria'] if c['selected']]
+    if len(selected)>15:raise HTTPException(422,'AHP supports up to 15 scoring criteria. Manual weighting supports larger sets.')
+    keys=[a+':'+b for a,b in ahp.pairs([c['id'] for c in selected])]
+    return ahp_json(criteria,selected,keys,state.get('ahp'),state.get('weights'))
 
 
 @app.post('/api/projects/{project_id}/weights/ahp/calculate')
@@ -1021,13 +1021,9 @@ def ai_context(connection,project_id):
     return criteria,selected,context,ai_weighting.fingerprint(context,criteria['revision'])
 
 
-def ai_state(connection,project_id):
+def ai_view(criteria,selected,context,token,draft,weights,suggestion):
     import cloudflare_ai
-    criteria,selected,context,token=ai_context(connection,project_id)
-    draft=connection.execute('SELECT * FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
-    weights=connection.execute('SELECT * FROM project_weights WHERE project_id=%s',(project_id,)).fetchone()
     current=bool(draft and draft['context']==token)
-    suggestion=connection.execute('SELECT * FROM project_ai_suggestions WHERE id=%s AND project_id=%s',(draft['suggestion_id'],project_id)).fetchone() if draft else None
     approved=bool(current and weights and weights['approved'] and weights['method']=='ai' and weights['criteria_revision']==criteria['revision'] and weights['provenance'].get('ai_revision')==draft['revision'])
     try:cloudflare_ai.settings();configured=True
     except cloudflare_ai.AIConnectionError:configured=False
@@ -1035,6 +1031,15 @@ def ai_state(connection,project_id):
             'weight_revision':weights['revision'] if weights else 0,'weights':draft['weights'] if current else {c['id']:'0.00' for c in selected},
             'notes':draft['notes'] if current else '', 'suggestion':{'id':str(suggestion['id']),**suggestion['snapshot']} if suggestion else None,
             'approved':approved,'needs_review':bool(draft and not current),'active_method':weights['method'] if weights else None,'configured':configured}
+
+
+
+def ai_state(connection,project_id):
+    criteria,selected,context,token=ai_context(connection,project_id)
+    draft=connection.execute('SELECT * FROM project_ai_drafts WHERE project_id=%s',(project_id,)).fetchone()
+    weights=connection.execute('SELECT * FROM project_weights WHERE project_id=%s',(project_id,)).fetchone()
+    suggestion=connection.execute('SELECT * FROM project_ai_suggestions WHERE id=%s AND project_id=%s',(draft['suggestion_id'],project_id)).fetchone() if draft else None
+    return ai_view(criteria,selected,context,token,draft,weights,suggestion)
 
 
 def record_ai_version(connection,project_id,revision,snapshot):
@@ -1045,7 +1050,13 @@ def record_ai_version(connection,project_id,revision,snapshot):
 
 @app.get('/api/projects/{project_id}/weights/ai')
 def get_ai_weights(project_id:UUID):
-    with database.connect() as connection:return ai_state(connection,project_id)
+    import ai_weighting
+    with database.connect() as connection:
+        state=project_read.load(connection,project_id,('suppliers','criteria','weights','ai_draft','ai_suggestion'))
+    criteria=state.criteria();selected=[c for c in criteria['configuration']['criteria'] if c['selected']]
+    context=ai_weighting.input_context(state.project['category'],selected)
+    token=ai_weighting.fingerprint(context,criteria['revision'])
+    return ai_view(criteria,selected,context,token,state.get('ai_draft'),state.get('weights'),state.get('ai_suggestion'))
 
 
 @app.post('/api/projects/{project_id}/weights/ai/suggest')

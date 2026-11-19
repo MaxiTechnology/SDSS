@@ -62,6 +62,7 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const listRequest = useRef<Promise<Project[]> | null>(null);
   const loadVersion = useRef(0);
+  const projectRequests = useRef(new Map<string,Promise<Project>>());
   const [project, setProject] = useState<Project | null>(null);
   const [form, setForm] = useState({ ...empty });
   const [id, setId] = useState(crypto.randomUUID());
@@ -88,6 +89,8 @@ function App() {
   const sensitivityView = detail && route.endsWith("/sensitivity");
   const rankingsView = detail && route.endsWith("/rankings");
   const matrixView = detail && route.endsWith("/matrix");
+  const routeProjectId = detail ? route.split("/")[2] : "";
+  const nestedView = supplierView || criteriaView || aiView || ahpView || weightingView || eligibilityView || reportView || decisionView || sensitivityView || rankingsView || matrixView;
   const stage = reportView || decisionView || sensitivityView || rankingsView || matrixView || eligibilityView ? 3 : criteriaView || weightingView || ahpView || aiView ? 2 : supplierView ? 1 : 0;
   function go(path: string) {
     location.hash = path;
@@ -100,14 +103,22 @@ function App() {
   async function load() {
     const version = ++loadVersion.current;
     const keepList = !detail && !accountView && hasList;
-    setLoading(!keepList);
+    const keepProject = nestedView && project?.id === routeProjectId;
+    setLoading(!keepList && !nestedView);
     setRefreshing(keepList);
     setError("");
-    setProject(null);
+    if (!keepProject) setProject(null);
     try {
-      if (accountView) return;
+      if (accountView || keepProject) return;
       if (detail) {
-        const p = await api<Project>(`/api/projects/${route.split("/")[2]}`);
+        let pending = projectRequests.current.get(routeProjectId);
+        if (!pending) {
+          pending = api<Project>(`/api/projects/${routeProjectId}`);
+          projectRequests.current.set(routeProjectId,pending);
+          const clear = () => { if (projectRequests.current.get(routeProjectId) === pending) projectRequests.current.delete(routeProjectId); };
+          void pending.then(clear,clear);
+        }
+        const p = await pending;
         if (version !== loadVersion.current) return;
         setProject(p);
         setForm({ ...p, estimated_budget: p.estimated_budget ?? "", target_date: p.target_date ?? "" });
@@ -251,7 +262,7 @@ function App() {
                 <span>
                   /{" "}
                   {detail
-                    ? project?.reference || "Project Details"
+                    ? (project?.id === routeProjectId ? project.reference : null) || "Project Details"
                     : "New Project Initialization"}
                 </span>
               </button>
@@ -309,32 +320,32 @@ function App() {
               {!fresh && !editing && <button onClick={() => void load()}>Try again</button>}
             </div>
           )}
-          {accountView ? <Accounts/> : loading || (!formView && !hasList && !error) ? (
+          {accountView ? <Accounts/> : (loading && !nestedView) || (!formView && !hasList && !error) ? (
             <p role="status">Loading projects…</p>
           ) : error && !formView ? (<p role="status">Saved project data could not be refreshed. Use Try again above.</p>) : dashboardView ? (
             <Dashboard onRefresh={()=>void load()} projects={items} onFilter={status=>{setStatusFilter(status);setSearch("");setPage(1);go("/");}} onOpen={p=>{setNotice("");go(p.resume_path||`/projects/${p.id}`);}} onReport={p=>go(`/projects/${p.id}/reports/${p.decision_id}`)} />
-          ) : reportView && project ? (
-            <DecisionReport key={route} projectId={project.id} decisionId={route.split("/")[4]} />
-          ) : decisionView && project ? (
-            <FinalDecision key={project.id} projectId={project.id} />
-          ) : sensitivityView && project ? (
-            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Sensitivity key={project.id} projectId={project.id} /></fieldset>
-          ) : rankingsView && project ? (
-            <Rankings key={project.id} projectId={project.id} />
-          ) : matrixView && project ? (
-            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<EvaluationMatrix key={project.id} projectId={project.id} /></fieldset>
-          ) : eligibilityView && project ? (
-            <Eligibility key={project.id} projectId={project.id} readOnly={!canPrepare} />
-          ) : aiView && project ? (
-              <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<AIWeighting key={project.id} projectId={project.id} /></fieldset>
-            ) : ahpView && project ? (
-              <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<AhpWeighting key={project.id} projectId={project.id} /></fieldset>
-            ) : weightingView && project ? (
-            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<ManualWeighting key={project.id} projectId={project.id} /></fieldset>
-          ) : criteriaView && project ? (
-            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Criteria key={project.id} projectId={project.id} /></fieldset>
-          ) : supplierView && project ? (
-            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Suppliers key={project.id} projectId={project.id} reference={project.reference} /></fieldset>
+          ) : reportView ? (
+            <DecisionReport key={route} projectId={routeProjectId} decisionId={route.split("/")[4]} />
+          ) : decisionView ? (
+            <FinalDecision key={routeProjectId} projectId={routeProjectId} />
+          ) : sensitivityView ? (
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Sensitivity key={routeProjectId} projectId={routeProjectId} /></fieldset>
+          ) : rankingsView ? (
+            <Rankings key={routeProjectId} projectId={routeProjectId} />
+          ) : matrixView ? (
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<EvaluationMatrix key={routeProjectId} projectId={routeProjectId} /></fieldset>
+          ) : eligibilityView ? (
+            <Eligibility key={routeProjectId} projectId={routeProjectId} readOnly={!canPrepare} />
+          ) : aiView ? (
+              <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<AIWeighting key={routeProjectId} projectId={routeProjectId} /></fieldset>
+            ) : ahpView ? (
+              <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<AhpWeighting key={routeProjectId} projectId={routeProjectId} /></fieldset>
+            ) : weightingView ? (
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<ManualWeighting key={routeProjectId} projectId={routeProjectId} /></fieldset>
+          ) : criteriaView ? (
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Criteria key={routeProjectId} projectId={routeProjectId} /></fieldset>
+          ) : supplierView ? (
+            <fieldset className="role-view" disabled={!canPrepare}>{!canPrepare&&<p className="info">Read-only review. A Procurement Officer or Administrator prepares these inputs.</p>}<Suppliers key={routeProjectId} projectId={routeProjectId} reference={project?.id === routeProjectId ? project.reference : ""} /></fieldset>
           ) : formView ? (
             (!detail || project) && (
               <form className="project-form" onSubmit={save}>

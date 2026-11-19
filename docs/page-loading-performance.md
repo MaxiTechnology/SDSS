@@ -40,3 +40,29 @@ Within one signed-in App, overlapping reads of the list share only the pending r
 Verification: the production build passed, all 29 page/browser checks passed, and the default backend suite passed 59 checks with twelve opt-in cloud cases skipped. The new isolated cloud projection test passed ten scenarios covering all seven workflow statuses, review timestamp matching, exact maximum-budget precision, superseded ranking runs and decision version precedence. It also asserts a single projection command for an empty workspace and the multi-project result. New delayed-response page checks passed pending-request coalescing, immediate known-data navigation, error hiding/retry and preservation of a newer unsaved form after a late old-page failure.
 
 The real-browser/cloud manual and account-permission journeys also passed after these changes (two tests, 3.7 minutes). Dashboard totals and saved-report navigation worked through the real API, role denials remained enforced, the Approver's report/PDF was saved, and the earlier manual report stayed unchanged. The runner verified downloaded PDF text and removed its schema/services.
+
+
+## Inside project pages — third pass
+
+The parent App previously cleared project metadata and waited for a fresh project GET before mounting each nested page. Nested pages now receive their project ID directly from the route and mount independently. The initial metadata request runs alongside the page request; overlapping metadata reads share only their pending promise. Once metadata for that project is known, moving between its sub-pages reuses it for the reference/header. The base editable Project Details view still loads the server version (or joins its pending read) before editing. Route sequence guards and project-ID keys prevent another project's late response from replacing the current view. Child page data is fetched anew; no authorization, evaluation or saved-decision response cache is introduced.
+
+Criteria, Manual Weighting, Eligibility, Matrix, Rankings, Decisions, AHP and AI GET handlers now request a single, scoped project snapshot from project_read.py. Fixed internal field definitions select only the related groups needed by each handler. The project ID remains a bound UUID parameter. Row-level UUID/timestamp types are restored using the same decoder as the list projection, while original snapshot JSON remains unchanged. Each of these eight GET handlers executed one SQL command in the read probe.
+
+These GET reads no longer take a project write lock merely to read the page. One SELECT supplies a consistent snapshot for criteria, reviews, weights and currentness checks. This also lets Rankings and Decisions read in parallel rather than waiting on the same project lock. Mutating endpoints retain the existing project locks, context checks and optimistic revisions. The existing AI response builder is shared between its read path and write-response path; provider calls/consent logic are unchanged. Legacy matrix recovery still uses only an exact matching stored ranking basis, and historical rankings/decisions remain readable when current eligibility is invalid.
+
+Warm matched handler measurements on project 2, with the pool already primed:
+
+| Handler | Earlier implementation (ms) | Updated implementation (ms) |
+| --- | ---: | ---: |
+| Criteria | 822 | 442 |
+| Manual weights | 998 | 414 |
+| Eligibility | 1507 | 450 |
+| Matrix | 1505 | 514 |
+| Rankings | 1742 | 454 |
+| Decisions | 1875 | 503 |
+| AHP | 979 | 452 |
+| AI weights | 1086 | 432 |
+
+These direct handler measurements include checkout/commit but exclude authentication, browser rendering and the earlier metadata waterfall. The original committed implementation and updated handlers ran in the same probe process against the same saved data. All eight response bodies matched exactly. Sixteen additional response/error-state comparisons on the other approved project and the draft project also matched. No saved project was modified by these probes.
+
+Validation: production build passed; all 71 backend checks passed with every cloud integration enabled; all 31 page/browser checks passed. New delayed-metadata tests prove the inner controls can load before metadata resolves, the pending metadata request is shared, the editable base form reloads, and another project's late response cannot replace the current page. All four real browser/cloud journeys passed in one 4.1-minute run: manual setup/evidence/eligibility/scenario/decision/PDF, AHP revision, synthetic-provider AI revision, and account roles/Approver approval. Actual downloaded PDFs passed text checks and earlier report JSON remained unchanged. Temporary test services and schemas were removed. Restart the backend to load these server changes.

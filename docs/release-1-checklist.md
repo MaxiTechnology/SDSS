@@ -39,3 +39,6 @@ These gaps mean the whole project and SDSS-017 should not be marked complete sol
 Login checkpoint (2026-11-19): Administrator, Procurement Officer and Approver permissions are implemented. Backend: 69 checks passed, with the refreshed real-auth checks passing after password-attempt hardening. Browser pages: 26 checks plus the new account-screen check passed. Signed-in manual/AHP/AI journeys passed; a focused manual/account rerun passed after an accessible-label correction. Reports retained their earlier versions and the Approver identity appeared in the exported PDF. The production build passed. See manual-workflow-verification.md for combined-run scope.
 
 Migration 14 was applied with unchanged fingerprints for all 15 existing procurement tables, preserving three projects. No real account was created. User setup and the login backend restart were subsequently completed; see the acceptance record. Temporary schemas and test services were cleaned up.
+
+
+Project sub-page performance checkpoint (2026-11-19): build, all 71 backend checks (cloud enabled), all 31 page checks and all four real browser/cloud journeys passed. GET pages use scoped snapshots and mount before outer metadata completes; write validation/locks are retained. Responses/error states matched the prior implementation on all three saved projects. See page-loading-performance.md.
