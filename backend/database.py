@@ -1,6 +1,7 @@
 """Database access; credentials are loaded privately and never logged."""
 import json
 import os
+import threading
 from pathlib import Path
 
 postgres_bin = Path("C:/Program Files/PostgreSQL/18/bin")
@@ -10,6 +11,20 @@ if os.name == "nt" and postgres_bin.exists():
     dll_directory = os.add_dll_directory(str(postgres_bin))
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+
+class _PooledConnection(psycopg.Connection):
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        owner = getattr(self, '_pool', None)
+        try:
+            super().__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            if owner is not None:
+                owner.putconn(self)
+
+
+_pool = None
+_pool_lock = threading.Lock()
 
 
 def settings():
@@ -18,7 +33,44 @@ def settings():
     return json.loads(Path(__file__).with_name("database.local.json").read_text(encoding="utf-8"))
 
 
+def _reset_connection(connection):
+    # Session settings (especially test-schema search_path) must never cross leases.
+    connection.autocommit = True
+    try:
+        connection.execute('RESET ALL')
+    finally:
+        connection.autocommit = False
+
+
+def open_pool(*, min_size=2, max_size=6):
+    """Enabled by the API lifespan only; standalone migrations keep raw connections."""
+    global _pool
+    with _pool_lock:
+        if _pool is not None:
+            return
+        config = dict(settings())
+        conninfo = config.pop('conninfo', '')
+        config.update(connect_timeout=15, row_factory=dict_row, prepare_threshold=None)
+        _pool = ConnectionPool(conninfo, connection_class=_PooledConnection, kwargs=config, min_size=min_size,
+            max_size=max_size, max_waiting=24, timeout=8, max_idle=60,
+            max_lifetime=1800, reset=_reset_connection,
+            check=ConnectionPool.check_connection, open=False, name='sdss-api')
+        _pool.open(wait=False)
+
+
+def close_pool():
+    global _pool
+    with _pool_lock:
+        pool, _pool = _pool, None
+    if pool is not None:
+        pool.close()
+
+
 def connect():
+    pool = _pool
+    if pool is not None:
+        # Preserve the existing connection API; context exit returns its lease.
+        return pool.getconn()
     return psycopg.connect(**settings(), connect_timeout=15, row_factory=dict_row)
 
 

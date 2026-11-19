@@ -47,6 +47,7 @@ def test_real_sessions_permissions_account_lifecycle_and_attribution(monkeypatch
         r=c.request(method,path,json=body);assert r.status_code==status,(path,r.text)
         return r.json() if r.content else None
     try:
+        database.open_pool(min_size=1,max_size=4)
         with isolated() as c:database.migrate(c);database.migrate(c)
         anonymous=client();assert req(anonymous,'GET','/api/auth/session')['setup_required']
         req(anonymous,'GET','/api/projects',status=401)
@@ -118,4 +119,5 @@ def test_real_sessions_permissions_account_lifecycle_and_attribution(monkeypatch
         limited=login(bad,'unknown','wrong password',429);assert limited.headers['Retry-After']=='300'
     finally:
         for c in clients:c.close()
+        database.close_pool()
         with original() as c:c.execute(sql.SQL('DROP SCHEMA {} CASCADE').format(sql.Identifier(schema)))

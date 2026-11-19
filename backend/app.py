@@ -10,7 +10,18 @@ import database
 import psycopg
 import auth
 
-app = FastAPI(title="SDSS API",dependencies=[Depends(auth.authorize)])
+from contextlib import asynccontextmanager
+from starlette.concurrency import run_in_threadpool
+
+@asynccontextmanager
+async def lifespan(application):
+    await run_in_threadpool(database.open_pool)
+    try:
+        yield
+    finally:
+        await run_in_threadpool(database.close_pool)
+
+app = FastAPI(title="SDSS API",dependencies=[Depends(auth.authorize)],lifespan=lifespan)
 app.include_router(auth.router)
 
 from fastapi.exceptions import RequestValidationError

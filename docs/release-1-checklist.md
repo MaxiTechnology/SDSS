@@ -30,7 +30,7 @@ Remaining release verification:
 - Live-provider availability/model behavior is separate from the synthetic AI workflow test; the earlier live synthetic suggestion check remains the provider evidence.
 - Physical mobile devices / additional browser engines and comprehensive accessibility review.
 - Deployment and operational recovery outside the local Windows development setup.
-- Complete first-account user acceptance and deployment security review; login and role permissions are implemented. Legacy Demo User records retain their historical attribution.
+- Deployment security review remains. First-account and role acceptance were completed by the user; legacy Demo User records retain their historical attribution.
 - Global supplier/evaluation/report pages and other settings remain disabled; project-scoped workflows and Administrator User Accounts are implemented.
 
 These gaps mean the whole project and SDSS-017 should not be marked complete solely from passing existing checks.
@@ -38,4 +38,4 @@ These gaps mean the whole project and SDSS-017 should not be marked complete sol
 
 Login checkpoint (2026-11-19): Administrator, Procurement Officer and Approver permissions are implemented. Backend: 69 checks passed, with the refreshed real-auth checks passing after password-attempt hardening. Browser pages: 26 checks plus the new account-screen check passed. Signed-in manual/AHP/AI journeys passed; a focused manual/account rerun passed after an accessible-label correction. Reports retained their earlier versions and the Approver identity appeared in the exported PDF. The production build passed. See manual-workflow-verification.md for combined-run scope.
 
-Migration 14 was applied with unchanged fingerprints for all 15 existing procurement tables, preserving three projects. No real account was created. User setup and restart of the old backend remain pending. Temporary schemas and test services were cleaned up.
+Migration 14 was applied with unchanged fingerprints for all 15 existing procurement tables, preserving three projects. No real account was created. User setup and the login backend restart were subsequently completed; see the acceptance record. Temporary schemas and test services were cleaned up.

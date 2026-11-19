@@ -236,4 +236,9 @@ Administrator, Procurement Officer and Approver roles are enforced by the backen
 
 For a focused account-permission rerun, append `--accounts` to the browser-runner command. It executes the manual setup journey followed by the account/Approver journey, in a new isolated schema; the default command still runs all four journeys. Page-test artifacts and live-test artifacts use separate folders so one runner cannot erase another runner's trace files.
 
-Login checkpoint (2026-11-19): 69 backend checks passed; 26 browser page checks and the new account-screen check passed. Signed-in manual/AHP/AI journeys and a focused manual/account rerun passed. Combined-run details and cleanup are recorded in docs/manual-workflow-verification.md. The local database migration preserved existing procurement records; first Administrator creation requires private user setup and restarting the older backend process.
+Login checkpoint (2026-11-19): 69 backend checks passed; 26 browser page checks and the new account-screen check passed. Signed-in manual/AHP/AI journeys and a focused manual/account rerun passed. Combined-run details and cleanup are recorded in docs/manual-workflow-verification.md. The local database migration preserved existing procurement records; first Administrator creation uses the private local setup tool. The user subsequently completed setup and role acceptance.
+
+
+## Page-loading performance
+
+The API now reuses a bounded set of cloud database connections while rechecking permissions on every request. A measured account/session check dropped from a 1.317-second median to a 0.410-second warm median on this local setup; cold starts and multi-query pages can still take longer. No schema migration is needed. Restart the backend after updating dependencies/code. See [measurements and pool lifecycle](docs/page-loading-performance.md). First-Administrator and Officer/Approver user acceptance have also been completed.
