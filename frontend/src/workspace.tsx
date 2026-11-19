@@ -1,3 +1,4 @@
+import {usePageRead} from './page-reads';
 import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {api} from './api';
 import {useAuth} from './auth';
@@ -14,11 +15,7 @@ const text=(value:unknown)=>String(value??'').toLowerCase();
 const date=(value:string)=>new Date(value).toLocaleString();
 const method=(value:string|null)=>({manual:'Manual',ahp:'AHP',ai:'AI-assisted'}[value??'']??'Not assigned');
 
-function useWorkspace<T>(path:string){
- const [data,setData]=useState<T|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState('');const version=useRef(0),pending=useRef<Promise<T>|null>(null);
- async function reload(){const request=++version.current;setLoading(true);setError('');try{if(!pending.current){const task=api<T>(path);pending.current=task;const clear=()=>{if(pending.current===task)pending.current=null;};void task.then(clear,clear);}const next=await pending.current;if(request===version.current)setData(next);}catch(e){if(request===version.current)setError((e as Error).message);}finally{if(request===version.current)setLoading(false);}}
- useEffect(()=>{void reload();return()=>{version.current++;};},[path]);return {data,loading,error,reload};
-}
+const useWorkspace=usePageRead;
 function Frame({state,children}:{state:{data:unknown;loading:boolean;error:string;reload:()=>Promise<void>};children:ReactNode}){return <section className="workspace-section"><button className="secondary" disabled={state.loading} onClick={()=>void state.reload()}>Refresh this page</button>{state.error?<p role="alert" className="error">{state.error} <button onClick={()=>void state.reload()}>Try again</button></p>:state.loading&&!state.data?<p role="status">Loading workspace data…</p>:<>{state.loading&&<p role="status" className="info">Refreshing workspace data…</p>}{children}</>}</section>;}
 function Pager({count,page,setPage}:{count:number;page:number;setPage:(n:number)=>void}){const pages=Math.max(1,Math.ceil(count/20));useEffect(()=>{if(page>pages)setPage(pages);},[page,pages]);return <div className="pagination"><span>{count} result{count===1?'':'s'}</span><div><button className="secondary" disabled={page<=1} onClick={()=>setPage(page-1)}>Previous</button> <span>{Math.min(page,pages)} / {pages}</span> <button className="secondary" disabled={page>=pages} onClick={()=>setPage(page+1)}>Next</button></div></div>;}
 function Table({name,headers,children}:{name:string;headers:string[];children:ReactNode}){return <div className="table-card table-scroll" role="region" aria-label={name} tabIndex={0}><table><thead><tr>{headers.map(h=><th key={h}>{h}</th>)}</tr></thead><tbody>{children}</tbody></table></div>;}

@@ -1,4 +1,5 @@
 import {SupplierDirectory,CriteriaLibrary,EvaluationOverview,ReportLibrary} from './workspace';
+import {PageReads,usePagePreload} from './page-reads';
 import {AuthBoundary,useAuth,roleName} from './auth';
 import {Accounts} from './accounts';
 import { Dashboard, WORKFLOW_STATUSES } from './dashboard';
@@ -54,6 +55,7 @@ function Icon({ n, list = false }: { n: number; list?: boolean }) {
   );
 }
 function App() {
+  const preload=usePagePreload();
   const {user,signOut,changePassword}=useAuth();
   const canPrepare=user.role!=="approver",canManage=user.role==="administrator";
   const [route, setRoute] = useState(location.hash.slice(1));
@@ -235,6 +237,8 @@ function App() {
             <button
               aria-current={(i===1?(!workspaceView&&!dashboardView&&!accountView):route===navPaths[i])?"page":undefined}
               key={v}
+              onPointerEnter={()=>{if(i>=2&&i<=6&&(i!==6||canManage))preload(i===6?'/api/auth/users':`/api/workspace/${['suppliers','templates','evaluations','reports'][i-2]}`);}}
+              onFocus={()=>{if(i>=2&&i<=6&&(i!==6||canManage))preload(i===6?'/api/auth/users':`/api/workspace/${['suppliers','templates','evaluations','reports'][i-2]}`);}}
               disabled={i===6&&!canManage}
               title={i===6&&!canManage?"Administrator access only":undefined}
               className={(i===1?(!workspaceView&&!dashboardView&&!accountView):route===navPaths[i])?"active":""}
@@ -620,6 +624,6 @@ function App() {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AuthBoundary><App /></AuthBoundary>
+    <AuthBoundary><PageReads><App /></PageReads></AuthBoundary>
   </React.StrictMode>,
 );

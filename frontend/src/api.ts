@@ -33,6 +33,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       r.status,
     );
   }
+  if(!['GET','HEAD','OPTIONS'].includes((options?.method??'GET').toUpperCase()))window.dispatchEvent(new Event('sdss-data-changed'));
   if (r.status === 204) return undefined as T;
   try {
     return await r.json();
