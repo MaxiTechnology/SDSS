@@ -10,7 +10,7 @@ import { Rankings } from './rankings';
 import { EvaluationMatrix } from './matrix';
 import { Eligibility } from './eligibility';
 import { ManualWeighting } from './weighting';
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -58,6 +58,10 @@ function App() {
   const accountView=location.hash.slice(1)==="/accounts";
   const [route, setRoute] = useState(location.hash.slice(1));
   const [items, setItems] = useState<Project[]>([]);
+  const [hasList, setHasList] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const listRequest = useRef<Promise<Project[]> | null>(null);
+  const loadVersion = useRef(0);
   const [project, setProject] = useState<Project | null>(null);
   const [form, setForm] = useState({ ...empty });
   const [id, setId] = useState(crypto.randomUUID());
@@ -94,28 +98,42 @@ function App() {
     return () => window.removeEventListener("hashchange", f);
   }, []);
   async function load() {
-    setLoading(true);
+    const version = ++loadVersion.current;
+    const keepList = !detail && !accountView && hasList;
+    setLoading(!keepList);
+    setRefreshing(keepList);
     setError("");
     setProject(null);
     try {
-      if (accountView) { setLoading(false); return; }
+      if (accountView) return;
       if (detail) {
         const p = await api<Project>(`/api/projects/${route.split("/")[2]}`);
+        if (version !== loadVersion.current) return;
         setProject(p);
-        setForm({
-          ...p,
-          estimated_budget: p.estimated_budget ?? "",
-          target_date: p.target_date ?? "",
-        });
-      } else setItems(await api<Project[]>("/api/projects"));
+        setForm({ ...p, estimated_budget: p.estimated_budget ?? "", target_date: p.target_date ?? "" });
+      } else {
+        // Share only an in-flight read in this signed-in App instance. Every
+        // later navigation still asks the server for current data/permissions.
+        let pending = listRequest.current;
+        if (!pending) {
+          pending = api<Project[]>("/api/projects");
+          listRequest.current = pending;
+          const clear = () => { if (listRequest.current === pending) listRequest.current = null; };
+          void pending.then(clear, clear);
+        }
+        const next = await pending;
+        if (version !== loadVersion.current) return;
+        setItems(next);
+        setHasList(true);
+      }
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Could not load projects. Please try again.",
-      );
+      if (version !== loadVersion.current) return;
+      setError(e instanceof Error ? e.message : "Could not load projects. Please try again.");
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }
   useEffect(() => {
@@ -126,7 +144,9 @@ function App() {
       setError("");
       setNotice("");
       setLoading(false);
+      setRefreshing(false);
     } else void load();
+    return () => { loadVersion.current++; };
   }, [route]);
   function update(key: keyof typeof empty, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -277,6 +297,7 @@ function App() {
             </div>
           )}
           {!canPrepare&&detail&&<nav className="review-links" aria-label="Review project"><p className="info">Review the shared project. Preparation controls are read-only for Approvers.</p>{[["","Project"],["/suppliers","Suppliers"],["/criteria","Criteria"],["/weights/manual","Weights"],["/eligibility","Eligibility"],["/matrix","Matrix"],["/rankings","Rankings"],["/sensitivity","Scenarios"],["/decision","Final Decision"]].map(([path,label])=><button key={path} className="secondary" onClick={()=>go(`/projects/${route.split("/")[2]}${path}`)}>{label}</button>)}</nav>}
+          {refreshing && <p className="info" role="status">Refreshing saved projects…</p>}
           {notice && (
             <div className="success" role="status">
               {notice}
@@ -288,7 +309,7 @@ function App() {
               {!fresh && !editing && <button onClick={() => void load()}>Try again</button>}
             </div>
           )}
-          {accountView ? <Accounts/> : loading ? (
+          {accountView ? <Accounts/> : loading || (!formView && !hasList && !error) ? (
             <p role="status">Loading projects…</p>
           ) : error && !formView ? (<p role="status">Saved project data could not be refreshed. Use Try again above.</p>) : dashboardView ? (
             <Dashboard onRefresh={()=>void load()} projects={items} onFilter={status=>{setStatusFilter(status);setSearch("");setPage(1);go("/");}} onOpen={p=>{setNotice("");go(p.resume_path||`/projects/${p.id}`);}} onReport={p=>go(`/projects/${p.id}/reports/${p.decision_id}`)} />

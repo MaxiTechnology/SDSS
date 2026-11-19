@@ -1,6 +1,8 @@
 """Read-only workflow projection shared by project lists and the dashboard."""
 import hashlib
 import json
+from datetime import datetime
+from uuid import UUID
 
 STATUSES=('Draft','In progress','Ready to evaluate','Evaluated','Approved','Deferred','Needs review')
 
@@ -50,19 +52,56 @@ def derive(project,suppliers,criteria,weights,reviews,matrix,run,decision,eligib
             'last_activity_at':max(activity).isoformat(),'decision_id':str(decision['id']) if decision else None}
 
 
+# A single statement uses one MVCC snapshot and avoids one cloud round trip per table.
+PROJECTS_SQL = """
+SELECT p.*,
+    COALESCE((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.created_at,s.id)
+        FROM project_suppliers s WHERE s.project_id=p.id),'[]'::jsonb) AS _suppliers,
+    COALESCE((SELECT jsonb_agg(to_jsonb(r)) FROM supplier_reviews r
+        JOIN project_suppliers s ON s.id=r.supplier_id WHERE s.project_id=p.id),'[]'::jsonb) AS _reviews,
+    (SELECT to_jsonb(c) FROM project_criteria c WHERE c.project_id=p.id) AS _criteria,
+    (SELECT jsonb_build_object('revision',w.revision,'criteria_revision',w.criteria_revision,
+        'approved',w.approved,'method',w.method,'updated_at',w.updated_at,
+        'provenance',jsonb_build_object('context',w.provenance->'context'))
+        FROM project_weights w WHERE w.project_id=p.id) AS _weights,
+    (SELECT jsonb_build_object('context',m.context,'revision',m.revision,
+        'entries',m.entries,'updated_at',m.updated_at)
+        FROM project_matrix m WHERE m.project_id=p.id) AS _matrix,
+    (SELECT jsonb_build_object('id',r.id,'context',r.context,
+        'matrix_revision',r.matrix_revision,'created_at',r.created_at)
+        FROM ranking_runs r WHERE r.project_id=p.id
+        ORDER BY r.created_at DESC,r.id DESC LIMIT 1) AS _run,
+    (SELECT jsonb_build_object('id',d.id,'ranking_id',d.ranking_id,'created_at',d.created_at,
+        'snapshot',jsonb_build_object('action',d.snapshot->'action'))
+        FROM project_decisions d WHERE d.project_id=p.id
+        ORDER BY d.version DESC LIMIT 1) AS _decision
+FROM purchasing_projects p
+"""
+
+
+def _record(value):
+    if value is None:
+        return None
+    row = dict(value)
+    # JSON aggregates keep nested evaluation values as JSON, while row-level IDs
+    # and timestamps must have the same types as ordinary Psycopg query results.
+    for key in ('id','project_id','supplier_id','ranking_id'):
+        if row.get(key) is not None:
+            row[key] = UUID(row[key])
+    for key in ('created_at','updated_at','supplier_updated_at'):
+        if row.get(key) is not None:
+            row[key] = datetime.fromisoformat(row[key])
+    return row
+
+
 def load_projects(connection,serialize,eligibility_fn,errors_fn):
-    # Coherent snapshot without taking project write locks or recalculating scores.
-    connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-    projects=connection.execute('SELECT * FROM purchasing_projects').fetchall()
-    if not projects:return []
-    suppliers={};reviews={}
-    for row in connection.execute('SELECT * FROM project_suppliers ORDER BY created_at,id').fetchall():suppliers.setdefault(row['project_id'],[]).append(row)
-    for row in connection.execute('SELECT * FROM supplier_reviews').fetchall():reviews[row['supplier_id']]=row
-    def indexed(query):return {r['project_id']:r for r in connection.execute(query).fetchall()}
-    criteria=indexed('SELECT * FROM project_criteria');weights=indexed('SELECT * FROM project_weights');matrices=indexed('SELECT * FROM project_matrix')
-    runs=indexed('SELECT DISTINCT ON (project_id) * FROM ranking_runs ORDER BY project_id,created_at DESC,id DESC')
-    decisions=indexed('SELECT DISTINCT ON (project_id) * FROM project_decisions ORDER BY project_id,version DESC')
-    result=[]
-    for p in projects:
-        pid=p['id'];result.append({**serialize(p),**derive(p,suppliers.get(pid,[]),criteria.get(pid),weights.get(pid),reviews,matrices.get(pid),runs.get(pid),decisions.get(pid),eligibility_fn,errors_fn)})
+    result = []
+    for row in connection.execute(PROJECTS_SQL).fetchall():
+        suppliers = [_record(s) for s in row['_suppliers']]
+        parsed_reviews = [_record(r) for r in row['_reviews']]
+        reviews = {r['supplier_id']:r for r in parsed_reviews}
+        state = derive(row,suppliers,_record(row['_criteria']),_record(row['_weights']),
+            reviews,_record(row['_matrix']),_record(row['_run']),_record(row['_decision']),
+            eligibility_fn,errors_fn)
+        result.append({**serialize(row),**state})
     return sorted(result,key=lambda p:(p['last_activity_at'],p['id']),reverse=True)
