@@ -1,0 +1,16 @@
+# Independent Render hosting in the user's own account. Demo tier only.
+# No service is created by this file until explicitly imported in Render.
+services:
+  - type: web
+    name: ssdss-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SDSS_ALLOWED_ORIGINS
+        sync: false

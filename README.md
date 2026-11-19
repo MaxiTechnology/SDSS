@@ -1,5 +1,7 @@
 # Supplier Selection Decision Support System (SSDSS)
 
+Independent deployment preparation is in [deploy/README.md](deploy/README.md): an owner-controlled Render web service, a separate Neon database, HTTPS login and private first-administrator setup. No hosted service has been created; container and public-release checks remain pending.
+
 University project under active development, based on the SDSS Figma prototype. React and TypeScript frontend, Python/FastAPI backend, PostgreSQL hosted on Neon. Use synthetic demonstration data only. The shared workspace requires sign-in with role permissions; do not expose the local development API publicly.
 
 ## Current implementation
