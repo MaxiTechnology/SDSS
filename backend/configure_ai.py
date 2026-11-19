@@ -7,7 +7,7 @@ from cloudflare_ai import AIConnectionError,verify_and_save
 
 
 def main():
-    window=tk.Tk();window.title('SDSS - Connect AI service');window.geometry('660x450')
+    window=tk.Tk();window.title('SSDSS - Connect AI service');window.geometry('660x450')
     panel=ttk.Frame(window,padding=24);panel.pack(fill='both',expand=True)
     ttk.Label(panel,text='Connect Cloudflare Workers AI',font=('Segoe UI',14,'bold')).pack(anchor='w')
     ttk.Label(panel,text='Copy the Account ID and API token from Cloudflare into this window.\nKeep this window private while entering your details.',wraplength=600).pack(anchor='w',pady=14)

@@ -217,10 +217,10 @@ function App() {
   return (
     <div className="layout">
       <aside>
-        <div className="brand">
-          <b>SD</b>
+        <div className="brand" title="Supplier Selection Decision Support System">
+          <b>SS</b>
           <div>
-            SDSS<small>DECISION SUPPORT</small>
+            SSDSS<small>SUPPLIER SELECTION</small>
           </div>
         </div>
         <p className="suite">PROCUREMENT SUITE</p>

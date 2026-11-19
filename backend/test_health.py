@@ -5,4 +5,4 @@ from app import app
 def test_health():
     response = TestClient(app).get("/api/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "SDSS API"}
+    assert response.json() == {"status": "ok", "service": "SSDSS API"}

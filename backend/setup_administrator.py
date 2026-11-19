@@ -6,9 +6,9 @@ import auth
 
 
 def main():
-    root=tk.Tk();root.title('SDSS — Create administrator');root.geometry('640x480')
+    root=tk.Tk();root.title('SSDSS — Create administrator');root.geometry('640x480')
     frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
-    ttk.Label(frame,text='Create the first SDSS administrator',font=('Segoe UI',14,'bold')).pack(anchor='w')
+    ttk.Label(frame,text='Create the first SSDSS administrator',font=('Segoe UI',14,'bold')).pack(anchor='w')
     ttk.Label(frame,text='Enter these details privately. Do not send your password in chat.').pack(anchor='w',pady=(10,12))
     values=[]
     for label,hidden in [('Username',False),('Display name',False),('Password (15–128 characters)',True),('Confirm password',True)]:
@@ -26,7 +26,7 @@ def main():
         def worker():
             try:
                 auth.bootstrap_administrator(name,display,password)
-                text='Administrator created. Close this window, return to SDSS and check account setup, then sign in.';success=True
+                text='Administrator created. Close this window, return to SSDSS and check account setup, then sign in.';success=True
             except ValueError as error:text=str(error);success=False
             except Exception:text='Account setup failed. Check that database migrations have been applied and your private connection is available.';success=False
             try:root.after(0,complete,text,success)

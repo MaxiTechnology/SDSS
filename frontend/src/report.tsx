@@ -9,7 +9,7 @@ export function DecisionReport({projectId,decisionId}:{projectId:string;decision
  async function download(){setBusy(true);setError('');try{
  const response=await fetch(path+'.pdf',{signal:AbortSignal.timeout(30000)});
  if(!response.ok){const body=await response.json().catch(()=>({}));throw Error(body.detail||'PDF download failed. Please try again.');}
- const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`SDSS-decision-${decisionId}-v${report?.version}.pdf`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+ const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`SSDSS-decision-${decisionId}-v${report?.version}.pdf`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
  }catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  async function downloadEvidence(file:Evidence){setBusy(true);setError('');try{
  const response=await fetch(`/api/projects/${projectId}/suppliers/${file.supplier_id}/evidence/${file.id}/content`,{signal:AbortSignal.timeout(30000)});

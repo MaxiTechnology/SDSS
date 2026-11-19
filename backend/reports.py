@@ -98,7 +98,7 @@ def render_pdf(report):
     cellstyle = ParagraphStyle('cell', parent=styles['BodyText'], fontSize=8, leading=12, spaceAfter=0, splitLongWords=True)
     def p(value, style='BodyText'):
         return Paragraph(escape(str(value if value is not None else 'Not specified')).replace('\n', '<br/>'), styles[style])
-    story = [p('SDSS / SUPPLIER DECISION SUPPORT'), p(report['title'], 'Title'), p(report['outcome'], 'Heading2')]
+    story = [p('SSDSS / SUPPLIER SELECTION DECISION SUPPORT SYSTEM'), p(report['title'], 'Title'), p(report['outcome'], 'Heading2')]
     def section(title, texts):
         story.append(p(title, 'Heading2'))
         for value in texts: story.extend([p(value), Spacer(1,3)])
@@ -133,8 +133,8 @@ def render_pdf(report):
     buffer = BytesIO()
     def footer(canvas, doc):
         canvas.saveState(); canvas.setFont('SDSS',8); canvas.setFillColor(colors.HexColor('#52617b'))
-        canvas.drawString(45,27,f"SDSS | Decision version {report['version']} | Synthetic data")
+        canvas.drawString(45,27,f"SSDSS | Decision version {report['version']} | Synthetic data")
         canvas.drawRightString(550,27,f'Page {doc.page}'); canvas.restoreState()
-    doc = SimpleDocTemplate(buffer, pagesize=(595.28,841.89), rightMargin=45,leftMargin=45,topMargin=40,bottomMargin=46,title=report['title'],author='SDSS demonstration')
+    doc = SimpleDocTemplate(buffer, pagesize=(595.28,841.89), rightMargin=45,leftMargin=45,topMargin=40,bottomMargin=46,title=report['title'],author='SSDSS demonstration')
     doc.build(story,onFirstPage=footer,onLaterPages=footer)
     return buffer.getvalue()

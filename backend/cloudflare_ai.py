@@ -47,7 +47,7 @@ def generate(config, messages, max_tokens=1024):
     request=urllib.request.Request(
         f"https://api.cloudflare.com/client/v4/accounts/{config['account_id']}/ai/run/{MODEL}",
         data=json.dumps({'messages':messages,'max_tokens':max_tokens,'temperature':0}).encode(),
-        headers={'Authorization':'Bearer '+config['token'],'Content-Type':'application/json','User-Agent':'SDSS/0.1'},method='POST')
+        headers={'Authorization':'Bearer '+config['token'],'Content-Type':'application/json','User-Agent':'SSDSS/0.1'},method='POST')
     try:
         with urllib.request.urlopen(request,timeout=25) as response:
             content=response.read(1048577)

@@ -15,7 +15,7 @@ import psycopg
 
 
 def connect_and_save(password):
-    print("SDSS — local database setup")
+    print("SSDSS — local database setup")
     print("Database: sdss_dev | User: sdss_app | Address: localhost:5432")
     print("Your password is hidden while typing. Press Enter when finished.")
     print("After a successful check, settings are saved in database.local.json")
@@ -49,11 +49,11 @@ def connect_and_save(password):
 
 def main():
     window = tk.Tk()
-    window.title("SDSS — Database setup")
+    window.title("SSDSS — Database setup")
     window.geometry("540x320")
     panel = ttk.Frame(window, padding=24)
     panel.pack(fill="both", expand=True)
-    ttk.Label(panel, text="Connect your SDSS database", font=("Segoe UI", 14, "bold")).pack(anchor="w")
+    ttk.Label(panel, text="Connect your SSDSS database", font=("Segoe UI", 14, "bold")).pack(anchor="w")
     ttk.Label(panel, text="Database: sdss_dev | User: sdss_app | Port: 5432").pack(anchor="w", pady=14)
     ttk.Label(panel, text="Password for sdss_app").pack(anchor="w")
     entry = ttk.Entry(panel, show="*", width=45)

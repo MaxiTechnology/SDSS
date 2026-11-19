@@ -1,0 +1,10 @@
+SSDSS SYNTHETIC EVIDENCE EXAMPLE
+Academic demonstration only - not a real certificate or procurement claim.
+
+Supplier: Example demonstration supplier
+Purpose: Practice attaching evidence to an eligibility review.
+Example requirement: Demonstration evidence document is available for review.
+
+This file illustrates the upload format. The reviewer must decide whether it
+supports the configured demonstration requirement and record their own notes.
+Uploading this file does not automatically pass any requirement.

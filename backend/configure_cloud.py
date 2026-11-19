@@ -39,7 +39,7 @@ def parse_settings(value):
 
 def main():
     window = tk.Tk()
-    window.title("SDSS — Connect Neon cloud database")
+    window.title("SSDSS — Connect Neon cloud database")
     window.geometry("620x350")
     panel = ttk.Frame(window, padding=24)
     panel.pack(fill="both", expand=True)

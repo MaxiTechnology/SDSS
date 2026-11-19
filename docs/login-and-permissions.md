@@ -18,7 +18,7 @@ Permissions are enforced in the API before project handlers run. Hiding or disab
 1. Install the locked backend dependencies and apply database migrations using the normal setup procedure. Migration 14 is additive; it adds accounts, sessions, attempt limits and nullable identity references.
 2. Open `Create administrator.cmd` in the repository folder. Enter a username, display name and a private password in the masked local window. Passwords must contain 15–128 characters; spaces and Unicode are supported. Usernames are case-insensitive, 3–80 ASCII characters: letters, numbers, dot, underscore, @, + and hyphen.
 3. The tool only works while no accounts exist. There is no default password or public first-account registration endpoint. It uses the existing private local database connection.
-4. Restart the backend, refresh SDSS, click Check Account Setup, and sign in.
+4. Restart the backend, refresh SSDSS, click Check Account Setup, and sign in.
 5. Open User Accounts to create Officer and Approver accounts. Share their initial passwords privately. Each must choose a different password at first sign-in.
 
 Keep the first administrator password in your password manager. This version has administrator-assisted resets for other accounts, but no email recovery or offline reset tool for an existing administrator. At least one active Administrator must remain. Role/name/status changes and password resets revoke that account's sessions; stale account edits are rejected. Accounts are disabled rather than deleted so recorded identity references remain valid.

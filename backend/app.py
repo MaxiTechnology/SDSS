@@ -22,7 +22,7 @@ async def lifespan(application):
     finally:
         await run_in_threadpool(database.close_pool)
 
-app = FastAPI(title="SDSS API",dependencies=[Depends(auth.authorize)],lifespan=lifespan)
+app = FastAPI(title="SSDSS API",dependencies=[Depends(auth.authorize)],lifespan=lifespan)
 app.include_router(auth.router)
 
 from fastapi.exceptions import RequestValidationError
@@ -45,7 +45,7 @@ async def private_api_responses(request,call_next):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "service": "SDSS API"}
+    return {"status": "ok", "service": "SSDSS API"}
 
 
 @app.exception_handler(psycopg.Error)
@@ -879,7 +879,7 @@ def download_decision_report(project_id: UUID, decision_id: UUID):
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
     return Response(content, media_type='application/pdf', headers={
-        'Content-Disposition': f'attachment; filename="SDSS-decision-{decision_id}-v{report["version"]}.pdf"',
+        'Content-Disposition': f'attachment; filename="SSDSS-decision-{decision_id}-v{report["version"]}.pdf"',
         'Cache-Control': 'no-store',
     })
 
@@ -1227,7 +1227,7 @@ def download_evidence(project_id:UUID,supplier_id:UUID,document_id:UUID):
         if not row:raise HTTPException(404,'Evidence document not found in this project and supplier.')
     extension='.pdf' if row['mime_type']=='application/pdf' else '.txt'
     return Response(bytes(row['content']),media_type=row['mime_type'],headers={
-        'Content-Disposition':f"attachment; filename=\"SDSS-evidence-{document_id}{extension}\"; filename*=UTF-8''{quote(row['filename'],safe='')}",
+        'Content-Disposition':f"attachment; filename=\"SSDSS-evidence-{document_id}{extension}\"; filename*=UTF-8''{quote(row['filename'],safe='')}",
         'X-Content-Type-Options':'nosniff','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; sandbox"})
 
 

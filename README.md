@@ -1,6 +1,6 @@
-# Supplier Decision Support System (SDSS)
+# Supplier Selection Decision Support System (SSDSS)
 
-University project under active development, based on the SDSS Figma prototype. React and TypeScript frontend, Python/FastAPI backend, PostgreSQL hosted on Neon. Use synthetic demonstration data only. This local demonstration has no login yet; do not expose the API publicly.
+University project under active development, based on the SDSS Figma prototype. React and TypeScript frontend, Python/FastAPI backend, PostgreSQL hosted on Neon. Use synthetic demonstration data only. The shared workspace requires sign-in with role permissions; do not expose the local development API publicly.
 
 ## Current implementation
 
@@ -250,3 +250,7 @@ Suppliers, Criteria & Weighting, Evaluations and Reports now open their own work
 Dashboard and Purchasing Projects received a second loading improvement: their shared workflow projection now uses one SQL read instead of nine, with identical project summaries in verification. Warm projection reads measured about 0.42 seconds versus 1.3–1.5 seconds previously (authentication/rendering excluded). Navigation retains the last loaded list while explicitly refreshing it; failed reads still hide old totals and require retry. After a read finishes, later navigation asks the server again, and no authorization cache is added. See docs/page-loading-performance.md for scope and checks.
 
 Project sub-pages now load independently of the outer metadata request. Eight read endpoints (criteria, manual weights, eligibility, matrix, rankings, decisions, AHP and AI) use scoped single-statement snapshots; write locks/revision checks remain on mutations. Matched warm reads measured about 0.4–0.5 seconds versus roughly 0.8–1.9 seconds previously, excluding authentication/rendering. Verification passed 71 backend checks, 31 browser checks and all four real browser/cloud journeys. Restart the backend after updating; no schema migration is required. Details are in docs/page-loading-performance.md.
+
+Branding: the application is Supplier Selection Decision Support System (SSDSS). Existing SDSS environment variables, internal identifiers, issue references and historical evidence files remain compatible.
+
+Rename verification (2026-11-20): production build and 11 targeted browser checks passed. Backend health/report tests could not start because Windows Application Control blocked the installed Argon2 native component. No procurement data or database schema was changed for the rename.
