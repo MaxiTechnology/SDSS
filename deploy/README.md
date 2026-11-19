@@ -33,11 +33,11 @@ Sources checked during preparation: [Render web services](https://render.com/doc
    | Variable | Value |
    | --- | --- |
    | `DATABASE_URL` | New deployment Neon URL, entered privately |
-   | `SDSS_ALLOWED_ORIGINS` | Exact actual service HTTPS origin, no slash/path; replace it if adding a custom domain |
+   | `SDSS_ALLOWED_ORIGINS` | `render` to use the assigned Render HTTPS URL automatically; use the exact HTTPS origin instead if adding a custom domain |
    | `CLOUDFLARE_ACCOUNT_ID` | Optional AI account ID, entered privately |
    | `CLOUDFLARE_API_TOKEN` | Optional scoped AI token, entered privately |
 
-   The service host is assigned by Render. Do not assume `ssdss-demo.onrender.com` is available. `PORT` is supplied by the host. Never set the deployed origin to localhost.
+   The `render` origin mode accepts only the platform-provided `RENDER_EXTERNAL_URL` while `RENDER=true`, validates it as an exact HTTPS onrender.com origin and resolves it before authentication loads. It never uses request headers or a wildcard. The service host is assigned by Render. Do not assume `ssdss-demo.onrender.com` is available. `PORT` is supplied by the host. Never set the deployed origin to localhost.
 6. Proxy configuration is an explicit release check. `FORWARDED_ALLOW_IPS` defaults to localhost only; verify Render's trusted proxy chain before changing it. Do not blindly use `*`. Without correct client-IP handling, multiple users behind the proxy may share the login IP attempt bucket. Verify rate limits with two clients and forged forwarding headers before treating this as a production release. [Uvicorn proxy guidance](https://www.uvicorn.org/deployment/#proxies-and-forwarded-headers).
 7. Confirm HTTPS sign-in/sign-out, Secure/HttpOnly/SameSite cookies, role restrictions, password changes/session revocation, create/reopen project, evidence upload/download, PDF export and the AI consent path. Confirm the separate deployment database starts empty, and that the local demo still has its original three projects. API health alone does not validate the database or login.
 

@@ -2,6 +2,18 @@
 from urllib.parse import urlsplit,parse_qs
 
 
+def resolve_environment(environment):
+    """Resolve only Render's operator-provided runtime URL, never request headers."""
+    if environment.get('SDSS_ALLOWED_ORIGINS')!='render':return
+    address=environment.get('RENDER_EXTERNAL_URL','')
+    parsed=urlsplit(address)
+    if environment.get('RENDER')!='true' or parsed.scheme!='https' or not parsed.hostname \
+        or not parsed.hostname.endswith('.onrender.com') or parsed.netloc!=parsed.hostname \
+        or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
+        raise RuntimeError('Render origin mode requires its assigned HTTPS RENDER_EXTERNAL_URL.')
+    environment['SDSS_ALLOWED_ORIGINS']=address
+
+
 def validate_environment(environment):
     database_url=environment.get('DATABASE_URL','')
     if not database_url:

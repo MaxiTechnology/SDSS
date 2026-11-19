@@ -1,9 +1,10 @@
 """Same-origin production entry point; local development still uses app:app."""
 import os
 from pathlib import Path
-from deployment_config import validate_environment
+from deployment_config import resolve_environment,validate_environment
 
 
+resolve_environment(os.environ)
 validate_environment(os.environ)
 from app import app
 from fastapi.staticfiles import StaticFiles
