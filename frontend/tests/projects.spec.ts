@@ -90,6 +90,7 @@ test("save failure preserves entries, retry and reopen survive refresh", async (
   await page.getByRole("button", {name:"Edit Project",exact:true}).click();
   await page.getByLabel("Currency").selectOption("RUB");
   await expect(page.getByText("Currency changed.", {exact:false})).toBeVisible();
+  await expect(page.getByLabel("Estimated Budget")).toHaveAccessibleDescription(/Budget in RUB is for planning/);
   await expect(page.getByLabel("Estimated Budget")).toHaveValue("140000.25");
   await page.getByLabel("Estimated Budget").fill("500000.00");
   await page.getByRole("button", {name:"Save Changes"}).click();
@@ -104,6 +105,37 @@ test("save failure preserves entries, retry and reopen survive refresh", async (
     images.every((img) => img.complete && img.naturalWidth > 0),
   )).toBe(true);
 });
+
+for (const width of [1440, 320]) {
+  test(`budget guidance follows currency and wraps at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 850 });
+    let payload: any = null;
+    await page.route("**/api/projects**", async route => {
+      if (route.request().method() === "POST") {
+        payload = route.request().postDataJSON();
+        return route.fulfill({ status: 201, json: {
+          ...payload, reference: "PRJ-001", status: "Draft", updated_at: "2026-11-16T10:00:00Z",
+        } });
+      }
+      return route.fulfill({ json: payload ? {
+        ...payload, reference: "PRJ-001", status: "Draft", updated_at: "2026-11-16T10:00:00Z",
+      } : [] });
+    });
+    await page.goto("/#/new");
+    const budget = page.getByRole("spinbutton", { name: "Estimated Budget (Optional)" });
+    const help = page.locator("#estimated-budget-help");
+    await expect(budget).toHaveAccessibleDescription("Budget in USD is for planning and does not exclude suppliers. Set a mandatory maximum price later under Mandatory Requirements.");
+    await page.getByLabel("Currency").selectOption("EUR");
+    await expect(budget).toHaveAccessibleDescription("Budget in EUR is for planning and does not exclude suppliers. Set a mandatory maximum price later under Mandatory Requirements.");
+    expect(await help.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByLabel("Project Name").fill("Planning project");
+    await page.locator("form").getByRole("button", { name: "Create Project", exact: true }).click();
+    await expect.poll(() => payload).not.toBeNull();
+    expect(payload.estimated_budget).toBeNull();
+    expect(payload.currency).toBe("EUR");
+  });
+}
 
 for (const width of [1440, 768, 375, 320]) {
   test(`project list keeps names visible and actions reachable at ${width}px`, async ({ page }) => {

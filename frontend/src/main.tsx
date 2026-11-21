@@ -413,20 +413,27 @@ function App() {
                         ))}
                       </select>
                     </label>
-                    <label>
-                      Estimated Budget <small>(Optional)</small>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        max="99999999999999.99"
-                        placeholder="0.00"
-                        value={form.estimated_budget}
-                        onChange={(e) =>
-                          update("estimated_budget", e.target.value)
-                        }
-                      />
-                    </label>
+                    <div>
+                      <label>
+                        Estimated Budget <small>(Optional)</small>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          max="99999999999999.99"
+                          placeholder="0.00"
+                          aria-describedby="estimated-budget-help"
+                          value={form.estimated_budget}
+                          onChange={(e) =>
+                            update("estimated_budget", e.target.value)
+                          }
+                        />
+                      </label>
+                      <p id="estimated-budget-help" className="estimated-budget-help">
+                        Budget in {form.currency} is for planning and does not exclude suppliers.
+                        Set a mandatory maximum price later under Mandatory Requirements.
+                      </p>
+                    </div>
                     <label>
                       Target Completion Date <small>(Optional)</small>
                       <input

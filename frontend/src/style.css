@@ -265,6 +265,13 @@ fieldset {
   grid-template-columns: 1fr 1fr;
   gap: 20px 24px;
 }
+.project-form .estimated-budget-help {
+  margin: 6px 0 0;
+  color: #565d79;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 label {
   font-size: 13px;
   font-weight: 500;
