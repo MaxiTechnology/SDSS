@@ -641,6 +641,12 @@ dialog::backdrop { background:#0006; }
 .criteria-page .inline-check {display:flex;align-items:center;gap:10px}
 .mandatory-row {display:grid;grid-template-columns:1fr 2fr auto;gap:16px;align-items:end;margin-bottom:16px}
 .criteria-page .table-card > button {margin:16px}
+.criteria-page .criteria-save-actions {flex-wrap:wrap}
+.criteria-page .criteria-weighting {margin-top:24px;padding-top:24px;border-top:1px solid #e5e9f4}
+.criteria-page .criteria-weighting h2 {margin:0}
+.criteria-page .criteria-weighting p {margin:8px 0 16px}
+.criteria-page .criteria-weighting-actions {display:flex;flex-wrap:wrap;gap:12px}
+.criteria-page .criteria-weighting-actions button {max-width:100%}
 @media(max-width:900px){.criteria-grid,.mandatory-row{grid-template-columns:1fr}}
 
 .project-form.weighting-page .inline-check { display:flex; flex-direction:row; align-items:center; gap:10px; margin:20px 0; }
