@@ -636,6 +636,8 @@ dialog::backdrop { background:#0006; }
 .criterion-editor label,.mandatory-settings label {display:block;margin-top:16px}
 .criteria-range {display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .criteria-page input[type=checkbox] {width:18px;height:18px;accent-color:#2563eb}
+.criteria-page .criteria-grid tr.configuring > td {background:#f5f8ff}
+.criteria-page .criteria-grid tr.configuring > td:first-child {box-shadow:inset 3px 0 #779eff}
 .criteria-page .inline-check {display:flex;align-items:center;gap:10px}
 .mandatory-row {display:grid;grid-template-columns:1fr 2fr auto;gap:16px;align-items:end;margin-bottom:16px}
 .criteria-page .table-card > button {margin:16px}
