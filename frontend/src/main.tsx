@@ -506,7 +506,7 @@ function App() {
                 <label className="project-status-filter">Status<select aria-label="Filter projects by status" value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1);}}><option value="All">All ({items.length})</option>{WORKFLOW_STATUSES.map(status=><option key={status} value={status}>{status} ({items.filter(p=>(p.workflow_status||p.status)===status).length})</option>)}</select></label><button className="secondary" onClick={()=>{setSearch("");setStatusFilter("All");setPage(1);}}>Clear filters</button><button className="secondary" onClick={()=>void load()}>Refresh projects</button>
               </div>
               <section className="table-card">
-                <div className="table-scroll" role="region" aria-label="Purchasing projects table" tabIndex={0}>
+                <div className="table-scroll projects-list-table" role="region" aria-label="Purchasing projects table" tabIndex={0}>
                   <table>
                     <thead>
                       <tr>
@@ -557,7 +557,7 @@ function App() {
                               )}
                             </td>
                             <td>
-                              <button
+                              <div className="actions"><button
                                 className="open-project"
                                 onClick={() => {
                                   setNotice("");
@@ -566,7 +566,7 @@ function App() {
                               >
                                 Open Project
                                 <Icon n={5} list />
-                              </button>{p.resume_path&&<button className="secondary" onClick={()=>go(p.resume_path!)}>Continue Workflow</button>}
+                              </button>{p.resume_path&&<button className="secondary" onClick={()=>go(p.resume_path!)}>Continue Workflow</button>}</div>
                             </td>
                           </tr>
                         ))}
