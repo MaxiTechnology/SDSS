@@ -31,7 +31,7 @@ def settings():
         data=json.loads(SETTINGS_FILE.read_text(encoding='utf-8'))
         return validate_settings(data['account_id'],data['token'])
     except (OSError,ValueError,KeyError):
-        raise AIConnectionError('AI is not configured. Open Connect AI service.cmd to save the private connection.') from None
+        raise AIConnectionError('AI suggestions are currently unavailable. Contact your administrator to configure the AI service, or continue using Manual or AHP weighting.') from None
 
 
 def unique_json_pairs(pairs):
