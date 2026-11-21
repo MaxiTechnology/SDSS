@@ -1,5 +1,24 @@
 import {test,expect} from './fixtures';
 import report from './report-fixture.json' with {type:'json'};
+test('workflow indicator describes previous steps without claiming completion',async({page})=>{
+ await page.route('**/api/projects/p1**',route=>route.fulfill({json:route.request().url().endsWith('/suppliers')?[]:{id:'p1',reference:'PRJ-T',name:'Project',currency:'USD',category:'',estimated_budget:null,target_date:null,description:'',status:'Draft',updated_at:'2026-11-18T10:00:00Z'}}));
+ for(const width of [1440,768,375]){
+  await page.setViewportSize({width,height:850});
+  await page.goto('/#/projects/p1/suppliers');
+  const steps=page.locator('.stepper > div');
+  await expect(steps.nth(0).locator('small')).toHaveText('Previous step');
+  await expect(steps.nth(1)).toHaveClass('current');
+  await expect(steps.nth(1).locator('small')).toHaveText('Active');
+  await expect(steps.nth(2).locator('small')).toHaveText('Upcoming');
+  await expect(steps.nth(3).locator('small')).toHaveText('Upcoming');
+  if(width>700){
+   const label=steps.nth(0).locator('small');
+   await expect(label).toBeVisible();
+   expect(await label.evaluate(el=>{const label=el.getBoundingClientRect(),step=el.closest('.stepper > div')!.getBoundingClientRect();return label.left>=step.left&&label.right<=step.right&&label.top>=step.top&&label.bottom<=step.bottom&&el.scrollWidth<=el.clientWidth;})).toBe(true);
+  }else await expect(steps.nth(0)).toBeHidden();
+  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ }
+});
 for(const width of [375,768])test(`navigation, forms, tables and review dialog fit ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:850});
  const project={id:'p1',reference:'PRJ-T',name:'Synthetic purchasing project with a long descriptive name',currency:'USD',category:'IT & Hardware',estimated_budget:null,target_date:null,description:'Synthetic demonstration',status:'Draft',workflow_status:'Approved',workflow_stage:'Decision',supplier_count:3,updated_at:'2026-11-18T10:00:00Z',last_activity_at:'2026-11-18T10:00:00Z',decision_id:'d1',resume_path:'/projects/p1/decision'};

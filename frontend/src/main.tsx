@@ -301,7 +301,7 @@ function App() {
                     <b>{i + 1}</b>
                     <span>
                       {i + 1}. {v}
-                      <small>{i === stage ? "Active" : i < stage ? "Completed" : "Upcoming"}</small>
+                      <small>{i === stage ? "Active" : i < stage ? "Previous step" : "Upcoming"}</small>
                     </span>
                   </div>
                 ))}
