@@ -652,6 +652,11 @@ dialog::backdrop { background:#0006; }
 .project-form.weighting-page .inline-check { display:flex; flex-direction:row; align-items:center; gap:10px; margin:20px 0; }
 .project-form.weighting-page .inline-check input { width:18px; height:18px; flex:none; }
 .weighting-page td small.supplier-note { background:none; padding:0; }
+.manual-weighting .weighting-methods, .manual-weighting .weighting-tools {margin:24px 0}
+.manual-weighting .weighting-methods h3, .manual-weighting .weighting-tools h3 {margin:0 0 12px}
+.manual-weighting .weighting-save-actions {margin:24px 0 0;padding:20px 0 0;background:none;border-radius:0;flex-wrap:wrap;gap:12px}
+.manual-weighting .weighting-continue {margin-top:24px;padding-top:20px;border-top:1px solid #f1f3fa}
+.manual-weighting .weighting-methods button, .manual-weighting .weighting-tools button, .manual-weighting .weighting-save-actions button, .manual-weighting .weighting-continue button {max-width:100%}
 
 .eligibility-page .review-meta {display:block;margin-top:8px;font-size:11px}
 .eligibility-page .status-eligible {background:#ecfdf5;color:#047857}
