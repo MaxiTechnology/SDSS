@@ -773,6 +773,30 @@ dialog::backdrop { background:#0006; }
   .suppliers-page > .table-scroll .actions button {max-width:calc(100vw - 200px)}
 }
 
+.criteria-overview .criteria-overview-hint {margin:0 0 8px;font-size:12px}
+.criteria-overview > .table-scroll {--project-column-width:220px;scroll-padding-inline:calc(var(--project-column-width) + 8px) 8px}
+.workspace-section .criteria-overview > .table-scroll table {table-layout:fixed;min-width:calc(var(--project-column-width) + 600px)}
+.criteria-overview > .table-scroll th:first-child, .criteria-overview > .table-scroll td:first-child {position:sticky;left:0;width:var(--project-column-width)}
+.criteria-overview > .table-scroll th:first-child {z-index:3;background:#eff4ff;white-space:normal}
+.criteria-overview > .table-scroll td:first-child {z-index:2;background:white;box-shadow:inset 0 -1px #e5e9f4}
+.criteria-overview > .table-scroll th:nth-child(2) {width:160px}
+.criteria-overview > .table-scroll th:nth-child(3) {width:200px}
+.criteria-overview > .table-scroll th:last-child {width:240px}
+.criteria-overview > .table-scroll th, .criteria-overview > .table-scroll td {padding:14px 16px}
+.criteria-overview > .table-scroll td {white-space:normal;overflow-wrap:anywhere;vertical-align:top;border-bottom:1px solid #e5e9f4}
+.criteria-overview > .table-scroll td .supplier-note {display:block;margin:6px 0 0;padding:0;background:none;line-height:1.4}
+.criteria-overview > .table-scroll .criteria-overview-value span {display:block}
+.criteria-overview > .table-scroll .criteria-overview-value span + span {margin-top:6px}
+.criteria-overview > .table-scroll .actions {flex-direction:column;align-items:flex-start;flex-wrap:nowrap;gap:8px}
+.criteria-overview > .table-scroll .actions button {max-width:100%;white-space:normal;overflow-wrap:anywhere;scroll-margin-inline:4px}
+.criteria-overview > .table-scroll td:last-child > small {display:block;margin-top:8px;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:700px) {
+  .criteria-overview > .table-scroll {--project-column-width:140px}
+  .criteria-overview > .table-scroll .actions {align-items:flex-end}
+  .criteria-overview > .table-scroll .actions button, .criteria-overview > .table-scroll td:last-child > small {max-width:calc(100vw - 200px)}
+  .criteria-overview > .table-scroll td:last-child > small {margin-left:auto}
+}
+
 .evaluations-page .evaluations-scroll-hint {margin:0 0 8px;font-size:12px}
 .evaluations-page .table-scroll {--project-column-width:220px;scroll-padding-inline:calc(var(--project-column-width) + 8px) 8px}
 .workspace-section .evaluations-page .table-scroll table {table-layout:fixed;min-width:calc(var(--project-column-width) + 780px)}

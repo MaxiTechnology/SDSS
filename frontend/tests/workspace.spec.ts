@@ -33,6 +33,51 @@ test('criteria templates preserve capture retries, preview confirmation and appl
  await page.getByRole('button',{name:'Preview and Apply',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Target project',{exact:true}).selectOption('p2');await dialog.getByRole('button',{name:'Load Application Preview',exact:true}).click();await expect(dialog.getByRole('button',{name:'Apply as Draft',exact:true})).toBeDisabled();await expect(dialog).toContainText('Saved decision reports remain unchanged.');await dialog.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights.").check();await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('Apply response uncertain');await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog).not.toBeVisible();expect(appliedIds[0]).toBe(appliedIds[1]);await expect(page.getByRole('button',{name:'Open draft weights',exact:true})).toBeVisible();
 });
 
+for(const width of [1440,1024,320])test(`criteria overview preserves details and navigation at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longName=`Synthetic project ${'LongName'.repeat(12)}`;
+ const overview=[{...projects[0],name:longName},{...projects[1],supplier_count:1},{...projects[0],id:'p3',name:'AHP project',weight_method:'ahp',weights_approved:false}];
+ let writes=0;
+ await page.route('**/api/workspace/templates**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{projects:overview,templates:[template]}});});
+ await page.route('**/api/projects**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:[]});});
+ await page.goto('/#/criteria');
+ const table=page.getByRole('region',{name:'Project criteria overview'}),hint=page.getByText('Scroll horizontally to see more criteria and weighting details and actions.');
+ await expect(table.getByRole('row')).toHaveCount(4);
+ const row=table.getByRole('row').nth(1),project=row.locator('td').first(),second=table.getByRole('row').nth(2),third=table.getByRole('row').nth(3);
+ await expect(project.locator('strong')).toHaveText(longName);await expect(project.locator('small')).toHaveText('PRJ-ONE · USD');
+ await expect(row.locator('td').nth(1)).toHaveText('2 selected · revision 1');await expect(row.locator('td').nth(2)).toHaveText('Manual · Approved values');
+ await expect(second).toContainText('Target project');await expect(second.locator('td').nth(1)).toHaveText('Not saved');await expect(second.locator('td').nth(2)).toHaveText('Not assigned · Draft or not current');
+ await expect(third.locator('td').nth(2)).toHaveText('AHP · Draft or not current');
+ await expect(second.getByRole('button',{name:'Open Criteria'})).toBeDisabled();await expect(second.getByRole('button',{name:'Open Weighting'})).toBeDisabled();
+ await expect(second.getByText('Add at least two suppliers first.')).toBeAttached();
+ expect(await project.evaluate(el=>{const name=el.querySelector('strong')!.getBoundingClientRect(),reference=el.querySelector('small')!.getBoundingClientRect();return name.bottom<=reference.top&&el.scrollWidth<=el.clientWidth;})).toBe(true);
+ expect(await row.locator('.criteria-overview-value').evaluateAll(cells=>cells.every(el=>{const spans=el.querySelectorAll('span');return spans[0].getBoundingClientRect().bottom<=spans[1].getBoundingClientRect().top;}))).toBe(true);
+ const overflows=await table.evaluate(el=>el.scrollWidth>el.clientWidth);
+ expect(overflows).toBe(width!==1440);await expect(hint).toHaveCount(overflows?1:0);
+ await page.setViewportSize({width:width===320?1440:320,height:850});await expect(hint).toHaveCount(width===320?0:1);
+ await page.setViewportSize({width,height:850});await expect(hint).toHaveCount(overflows?1:0);
+ await table.evaluate(el=>{el.scrollLeft=0;});await table.focus();expect(await table.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ await table.evaluate(el=>{el.scrollTo({left:0,behavior:'instant'});});await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBe(0);const start=await project.boundingBox();
+ await table.screenshot({path:`test-results/criteria-overview-left-${width}.png`});
+ if(overflows){await page.keyboard.press('ArrowRight');await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);}
+ await table.focus();await page.keyboard.press('Tab');
+ for(const name of ['Open Criteria','Open Weighting']){
+  const button=row.getByRole('button',{name,exact:true});await expect(button).toBeFocused();
+  const geometry=await button.evaluate(el=>{const region=el.closest('.table-scroll')!.getBoundingClientRect(),sticky=el.closest('tr')!.querySelector('td')!.getBoundingClientRect(),box=el.getBoundingClientRect();return {visible:box.left>=sticky.right-1&&box.right<=region.right+1,content:el.scrollWidth<=el.clientWidth,focus:getComputedStyle(el).outlineStyle};});
+  expect(geometry.visible,`${name}: ${JSON.stringify(geometry)}`).toBe(true);expect(geometry.content).toBe(true);expect(geometry.focus).not.toBe('none');
+  if(name==='Open Criteria')await page.keyboard.press('Tab');
+ }
+ await table.evaluate(el=>{el.scrollTo({left:el.scrollWidth,behavior:'instant'});});await expect.poll(()=>table.evaluate(el=>el.scrollWidth-el.clientWidth-el.scrollLeft)).toBeLessThanOrEqual(1);const end=await project.boundingBox();expect(Math.abs(start!.x-end!.x)).toBeLessThanOrEqual(1);
+ expect(await project.evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(255, 255, 255)',z:2});
+ expect(await table.getByRole('columnheader',{name:'Project'}).evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(239, 244, 255)',z:3});
+ expect(await second.getByText('Add at least two suppliers first.').evaluate(el=>{const region=el.closest('.table-scroll')!.getBoundingClientRect(),sticky=el.closest('tr')!.querySelector('td')!.getBoundingClientRect(),box=el.getBoundingClientRect();return box.left>=sticky.right-1&&box.right<=region.right+1&&el.scrollWidth<=el.clientWidth;})).toBe(true);
+ await table.screenshot({path:`test-results/criteria-overview-right-${width}.png`});
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await row.getByRole('button',{name:'Open Weighting'}).click();await expect(page).toHaveURL(/projects\/p1\/weights\/manual$/);
+ await page.goto('/#/criteria');await page.reload();await page.getByRole('region',{name:'Project criteria overview'}).getByRole('row').nth(3).getByRole('button',{name:'Open Criteria'}).click();await expect(page).toHaveURL(/projects\/p3\/criteria$/);
+ expect(writes).toBe(0);
+});
+
 test('Approver can read all workspace pages without preparation controls at phone width',async({page})=>{
  await page.setViewportSize({width:375,height:850});await page.route('**/api/auth/session',r=>r.fulfill({json:{user:{id:'a1',username:'approver',display_name:'Approver',role:'approver',active:true,must_change:false,updated_at:stamp},csrf_token:'a'.repeat(64),setup_required:false}}));
  await page.route('**/api/workspace/**',r=>{const path=new URL(r.request().url()).pathname;return r.fulfill({json:path.endsWith('/suppliers')?{projects,suppliers:[supplier]}:path.endsWith('/evaluations')?{projects:[evaluation]}:path.endsWith('/reports')?{projects,reports:[report]}:{projects,templates:[template]}});});
