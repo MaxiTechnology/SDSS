@@ -796,6 +796,16 @@ dialog::backdrop { background:#0006; }
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
 .decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }
+.decision-page .decision-summary {padding:20px;border:1px solid #e5e9f4;border-radius:4px;background:white;overflow-wrap:anywhere}
+.decision-page .decision-summary h3 {margin:0 0 16px}
+.decision-page .decision-summary .error {margin:0 0 16px}
+.decision-page .decision-summary dl {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:16px;margin:0}
+.decision-page .decision-summary dt {font-size:12px;font-weight:600;color:#565d79}
+.decision-page .decision-summary dd {margin:6px 0 0;overflow-wrap:anywhere}
+.decision-page .decision-report-action, .decision-page .decision-revision-action, .decision-page .decision-history, .decision-page .decision-navigation {margin-top:24px}
+.decision-page .decision-revision-action, .decision-page .decision-history, .decision-page .decision-navigation {padding-top:20px;border-top:1px solid #f1f3fa}
+.decision-page .decision-history summary:focus-visible {outline:3px solid #779eff;outline-offset:3px}
+.decision-page .decision-report-action button, .decision-page .decision-revision-action button, .decision-page .decision-history button, .decision-page .decision-navigation button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
 
 .dashboard-cards {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin:20px 0 30px;}
 .dashboard-cards>button,.dashboard-cards>div {background:white;border:1px solid #dce2ed;border-radius:10px;text-align:left;padding:22px;color:#203147;}
