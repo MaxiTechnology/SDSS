@@ -377,6 +377,55 @@ for(const width of [1440,1024,320])test(`global suppliers table, disclosure and 
  expect(writes).toBe(0);
 });
 
+for(const viewport of [{width:1440,height:850},{width:320,height:850},{width:320,height:320}])test(`global add supplier dialog remains accessible at ${viewport.width}x${viewport.height}`,async({page})=>{
+ await page.setViewportSize(viewport);
+ const attempts:{id:string;name:string;location:string;description:string}[]=[];
+ let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/**',route=>route.request().url().endsWith('/api/auth/session')?route.fallback():route.abort());
+ await page.route('**/api/projects',route=>route.fulfill({json:[]}));
+ await page.route('**/api/workspace/suppliers',route=>route.fulfill({json:{projects,suppliers:[]}}));
+ await page.route('**/api/projects/p2/suppliers',async route=>{
+  attempts.push(route.request().postDataJSON());
+  if(attempts.length===1){await gate;return route.fulfill({status:503,json:{detail:'Synthetic supplier unavailable'}});}
+  return route.fulfill({status:201,json:{...attempts[1],project_id:'p2',updated_at:stamp}});
+ });
+ await page.goto('/#/suppliers');
+ const trigger=page.getByRole('button',{name:'Add Supplier',exact:true});await trigger.click();
+ const dialog=page.getByRole('dialog',{name:'Add a supplier'}),body=dialog.locator('.dialog-body'),header=dialog.locator('.dialog-heading'),footer=dialog.locator('.dialog-footer');
+ const destination=dialog.getByLabel('Destination project',{exact:true}),name=dialog.getByLabel('Supplier name',{exact:true}),location=dialog.getByLabel('Supplier location',{exact:true}),description=dialog.getByLabel('Supplier description',{exact:true});
+ const cancel=dialog.getByRole('button',{name:'Cancel',exact:true}),save=dialog.getByRole('button',{name:'Save Supplier Entry',exact:true}),close=dialog.getByRole('button',{name:'Close dialog',exact:true});
+ await expect(close).toBeFocused();await expect(name).toHaveValue('');await expect(location).toHaveValue('');await expect(description).toHaveValue('');
+ await expect(destination).toHaveAttribute('required','');await expect(name).toHaveAttribute('required','');await expect(name).toHaveAttribute('maxlength','200');await expect(location).toHaveAttribute('maxlength','200');await expect(description).toHaveAttribute('maxlength','5000');
+ await expect(destination.locator('option')).toHaveCount(3);await expect(destination.locator('option[value="p2"]')).toHaveText('PRJ-TWO — Target project');
+ await expect(dialog.getByText('Each project has its own supplier entry. Reviews and evidence are not copied. Adding a supplier may require eligibility review and recalculation.')).toBeVisible();
+ const initialHeader=await header.boundingBox(),initialFooter=await footer.boundingBox();
+ if(viewport.height===320)await dialog.screenshot({path:'test-results/add-supplier-short-top.png'});
+ for(const field of [destination,name,location,description,cancel,save,close]){
+  await page.keyboard.press('Tab');await expect(field).toBeFocused();expect(await field.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+  if(await field.evaluate(el=>!!el.closest('.dialog-body'))){const geometry=await field.evaluate(el=>{const box=el.getBoundingClientRect(),body=el.closest('.dialog-body')!.getBoundingClientRect();return {field:el.getAttribute('aria-label')||el.closest('label')?.textContent,top:Math.round(box.top-body.top),bottom:Math.round(box.bottom-body.bottom)};});expect(geometry.bottom,JSON.stringify(geometry)).toBeLessThanOrEqual(1);expect(geometry.top,JSON.stringify(geometry)).toBeGreaterThanOrEqual(-1);}
+ }
+ await page.keyboard.press('Shift+Tab');await expect(save).toBeFocused();await page.keyboard.press('Tab');await expect(close).toBeFocused();
+ await body.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const finalHeader=await header.boundingBox(),finalFooter=await footer.boundingBox();
+ expect(Math.abs(initialHeader!.y-finalHeader!.y)).toBeLessThanOrEqual(1);expect(Math.abs(initialFooter!.y-finalFooter!.y)).toBeLessThanOrEqual(1);
+ expect(finalFooter!.y+finalFooter!.height).toBeLessThanOrEqual(viewport.height);expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ const cancelBox=(await cancel.boundingBox())!,saveBox=(await save.boundingBox())!;expect(cancelBox.x+cancelBox.width).toBeLessThanOrEqual(saveBox.x);
+ if(viewport.height===320)await dialog.screenshot({path:'test-results/add-supplier-short-bottom.png'});
+ await name.fill('Synthetic unsaved supplier');await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
+ await trigger.click();await expect(name).toHaveValue('');await cancel.click();await expect(trigger).toBeFocused();
+ await trigger.click();await close.click();await expect(trigger).toBeFocused();
+ await trigger.click();await save.click();expect(attempts).toHaveLength(0);await expect(destination).toBeFocused();
+ await destination.selectOption('p2');await save.click();expect(attempts).toHaveLength(0);await expect(name).toBeFocused();
+ await name.fill('Synthetic supplier');await location.fill('Synthetic location');await description.fill('Synthetic description');await name.press('Enter');await expect.poll(()=>attempts.length).toBe(1);
+ await expect(dialog.getByRole('button',{name:'Saving…'})).toBeDisabled();await expect(cancel).toBeDisabled();await expect(close).toBeDisabled();await expect(destination).toBeDisabled();
+ await page.keyboard.press('Escape');await expect(dialog).toBeVisible();await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
+ release();const alert=dialog.getByRole('alert');await expect(alert).toContainText('Synthetic supplier unavailable');await expect(alert).toBeFocused();
+ expect(await alert.evaluate(el=>{const box=el.getBoundingClientRect(),body=el.closest('.dialog-body')!.getBoundingClientRect();return box.top>=body.top-1&&box.bottom<=body.bottom+1;})).toBe(true);
+ await expect(name).toHaveValue('Synthetic supplier');await expect(location).toHaveValue('Synthetic location');await expect(description).toHaveValue('Synthetic description');
+ await save.click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
+ expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
+});
+
 for(const viewport of [{width:1440,height:850},{width:320,height:320}])test(`copy supplier dialog remains accessible at ${viewport.width}x${viewport.height}`,async({page})=>{
  await page.setViewportSize(viewport);
  const longName=`Synthetic supplier ${'LongName'.repeat(12)}`,longDescription=`Synthetic details ${'LongText '.repeat(100)}`;
@@ -393,7 +442,7 @@ for(const viewport of [{width:1440,height:850},{width:320,height:320}])test(`cop
  });
  await page.goto('/#/suppliers');
  await page.getByRole('button',{name:'Add Supplier',exact:true}).click();
- const addDialog=page.getByRole('dialog',{name:'Add a supplier'});await expect(addDialog.locator('form.project-form.workspace-form')).toBeVisible();await expect(addDialog.getByLabel('Supplier name',{exact:true})).toHaveValue('');
+ const addDialog=page.getByRole('dialog',{name:'Add a supplier'});await expect(addDialog.locator('form')).toBeVisible();await expect(addDialog.getByLabel('Supplier name',{exact:true})).toHaveValue('');
  await addDialog.getByRole('button',{name:'Close dialog'}).click();
  const trigger=page.getByRole('row').filter({hasText:longName}).getByRole('button',{name:'Copy to Project',exact:true});
  await trigger.click();

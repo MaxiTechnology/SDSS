@@ -646,6 +646,21 @@ dialog::backdrop { background:#0006; }
 @media(max-height:450px) {
   .copy-supplier-dialog .dialog-heading, .copy-supplier-dialog .dialog-footer {padding:12px 16px}
 }
+.add-global-supplier-dialog[open] {display:flex;flex-direction:column;max-height:calc(100dvh - 24px);overflow:hidden}
+.add-global-supplier-dialog form {display:flex;flex:1 1 auto;flex-direction:column;min-height:0}
+.add-global-supplier-dialog .dialog-heading,.add-global-supplier-dialog .dialog-footer {flex:none;gap:12px}
+.add-global-supplier-dialog .dialog-heading h2 {margin:0;min-width:0;overflow-wrap:anywhere}
+.add-global-supplier-dialog .dialog-heading button {flex:none}
+.add-global-supplier-dialog .dialog-body {min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding-block:12px}
+.add-global-supplier-dialog .dialog-body > p {font-size:13px;line-height:1.5}
+.add-global-supplier-dialog .dialog-body .info {margin:0 0 20px}
+.add-global-supplier-dialog label {margin:16px 0}
+.add-global-supplier-dialog input,.add-global-supplier-dialog select,.add-global-supplier-dialog textarea {display:block;width:100%;margin-top:8px}
+.add-global-supplier-dialog .dialog-footer {flex-wrap:wrap}
+.add-global-supplier-dialog .dialog-footer .primary {margin-left:auto}
+@media(max-height:450px) {
+  .add-global-supplier-dialog .dialog-heading,.add-global-supplier-dialog .dialog-footer {padding:12px 16px}
+}
 @media(max-width:700px) { .supplier-footer {flex-direction:column;} .supplier-page .card-heading {align-items:flex-start; gap:12px;} }
 .criteria-grid {display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;margin-bottom:24px}
 .criterion-editor h2,.mandatory-settings h2 {margin-top:0}
