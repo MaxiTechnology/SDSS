@@ -27,6 +27,7 @@ await expect(page.getByRole('alert')).toContainText('Storage unavailable');
 await expect(page.getByLabel('Review notes for Certificate')).toHaveValue('Sample certificate is current.');
 await page.getByRole('button',{name:'Save Review',exact:true}).click();
 await expect(page.getByText('Review saved for Supplier A.',{exact:true})).toBeVisible();
+await expect(page.getByRole('button',{name:'Review Supplier A',exact:true})).toBeFocused();
 await page.reload();await expect(page.getByText('1 eligible',{exact:false})).toBeVisible();
 await page.getByRole('button',{name:'Review Supplier A',exact:true}).click();
 await expect(page.getByLabel('Determination for Certificate')).toHaveValue('passed');
@@ -78,5 +79,68 @@ for(const width of [1440,320])test(`eligibility guidance, table and continuation
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
  if(width===320){await next.click();await expect(page).toHaveURL(/projects\/p1\/matrix$/);}
  else{await page.getByRole('button',{name:'Back to AHP Weighting',exact:false}).click();await expect(page).toHaveURL(/projects\/p1\/weights\/ahp$/);}
+ expect(writes).toBe(0);
+});
+
+for(const viewport of [{width:1440,height:900},{width:320,height:400},{width:320,height:300}])test(`review dialog keeps controls accessible at ${viewport.width}x${viewport.height}`,async({page})=>{
+ await page.setViewportSize(viewport);
+ const stamp='2026-11-16T10:00:00Z',filename=viewport.height===300?`${'W'.repeat(176)}.txt`:`${'synthetic-evidence-'.repeat(5)}document.txt`,supplier=viewport.width===320?`Supplier ${'LongName'.repeat(16)}`:'Supplier A';
+ let writes=0;
+ await page.route('**/api/projects**',route=>{
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  const url=route.request().url();
+  if(url.endsWith('/evidence'))return route.fulfill({json:{files:[{id:'f1',filename,size_bytes:18,check_id:'cert',check_name:'Certificate',created_at:stamp,uploaded_by:'Reviewer A'}],evidence_revision:0,limits:{used_bytes:18,max_bytes:20971520,file_max_bytes:2097152,active_limit:10,stored_files:1,stored_file_limit:100}}});
+  if(url.endsWith('/eligibility'))return route.fulfill({json:{suppliers:[{id:'s1',name:supplier,updated_at:stamp,checks:{cert:{status:'pending',notes:''}},total_price:null,price_status:'pending',eligibility:'pending',revision:0,needs_review:false,reviewer:null,reviewed_at:null}],mandatory_checks:[{id:'cert',name:'Certificate',requirement:'Valid certificate'}],maximum_price:'100',currency:'USD',criteria_revision:1,eligible_count:0,ready:false}});
+  return route.fulfill({json:{id:'p1',reference:'PRJ-T',name:'Test',currency:'USD'}});
+ });
+ await page.goto('/#/projects/p1/eligibility');
+ const opener=page.getByRole('button',{name:`Review ${supplier}`,exact:true});
+ await opener.click();
+ const dialog=page.getByRole('dialog',{name:`Review: ${supplier}`});
+ const close=dialog.getByRole('button',{name:'Close review'}),save=dialog.getByRole('button',{name:'Save Review'});
+ await expect(dialog).toBeVisible();await expect(close).toBeFocused();
+ await expect(dialog.getByRole('heading',{name:'Mandatory requirement reviews'})).toBeVisible();
+ await expect(dialog.getByRole('heading',{name:'Existing documents'})).toBeAttached();
+ await expect(dialog.getByRole('heading',{name:'Upload a document'})).toBeAttached();
+ await expect(dialog.getByText('Uploads and removals save immediately; Cancel only discards unsaved review notes.')).toBeAttached();
+ await expect(dialog.getByText(filename,{exact:true})).toBeAttached();
+ const uploaded=dialog.locator('.evidence-existing .review-meta');
+ const localTime=await page.evaluate(value=>new Date(value).toLocaleString(),stamp);
+ await expect(uploaded).toHaveText(`Uploaded ${localTime} by Reviewer A`);
+ const download=dialog.getByRole('button',{name:`Download ${filename}`,exact:true}),remove=dialog.getByRole('button',{name:`Remove ${filename}`,exact:true});
+ expect(await download.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(await remove.evaluate(el=>getComputedStyle(el).backgroundColor));
+ const title=dialog.getByRole('heading',{name:`Review: ${supplier}`});
+ await page.keyboard.press('Shift+Tab');await expect(title).toBeFocused();
+ if(viewport.width===320){
+  expect(await title.evaluate(el=>el.scrollHeight>el.clientHeight)).toBe(true);
+  await page.keyboard.press('End');await expect.poll(()=>title.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+ }
+ await page.keyboard.press('Shift+Tab');await expect(save).toBeFocused();
+ await page.keyboard.press('Tab');await expect(title).toBeFocused();
+ for(let i=0;i<11;i++){
+  await page.keyboard.press('Tab');
+  await expect.poll(()=>dialog.evaluate(el=>{
+   const body=el.querySelector('.review-form')!,focus=document.activeElement!;
+   if(!body.contains(focus))return el.contains(focus);
+   const bounds=body.getBoundingClientRect(),rect=focus.getBoundingClientRect();
+   return rect.top>=bounds.top-1&&rect.bottom<=bounds.bottom+1;
+  }),{message:`Focused control: ${await page.evaluate(()=>document.activeElement?.outerHTML.slice(0,200))}`}).toBe(true);
+ }
+ const warning=dialog.getByText('Uploads and removals save immediately; Cancel only discards unsaved review notes.');
+ await warning.scrollIntoViewIfNeeded();await expect(warning).toBeVisible();
+ const notes=dialog.getByLabel('Review notes for Certificate');
+ await notes.focus();await notes.fill('Unsaved synthetic review');
+ await dialog.getByLabel('Choose evidence document').focus();
+ const layout=await dialog.evaluate(el=>{
+  const rect=el.getBoundingClientRect(),header=el.querySelector('.dialog-heading')!.getBoundingClientRect(),footer=el.querySelector('.dialog-footer')!.getBoundingClientRect(),body=el.querySelector('.review-form')!;
+  const focused=document.activeElement!.getBoundingClientRect(),bodyRect=body.getBoundingClientRect();
+  const evidence=el.querySelector('.evidence-existing')!;
+  return {inside:rect.top>=0&&rect.bottom<=innerHeight&&rect.left>=0&&rect.right<=innerWidth,header:header.bottom<=bodyRect.top+1,footer:bodyRect.bottom<=footer.top+1,focus:focused.top>=bodyRect.top&&focused.bottom<=bodyRect.bottom,scrolls:body.scrollHeight>body.clientHeight,noOverflow:evidence.scrollWidth<=evidence.clientWidth};
+ });
+ expect(layout).toEqual({inside:true,header:true,footer:true,focus:true,scrolls:true,noOverflow:true});
+ expect(await dialog.getByLabel('Choose evidence document').evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ await expect(close).toBeInViewport();await expect(save).toBeInViewport();await expect(dialog.getByRole('button',{name:'Cancel'})).toBeInViewport();
+ page.once('dialog',d=>d.dismiss());await page.keyboard.press('Escape');await expect(dialog).toBeVisible();await expect(notes).toHaveValue('Unsaved synthetic review');
+ page.once('dialog',d=>d.accept());await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();
  expect(writes).toBe(0);
 });

@@ -25,3 +25,29 @@ test('evidence upload retry, review revision, cloud download and removal',async(
  await page.getByRole('heading',{name:'Evidence documents',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'test-results/evidence.png',fullPage:true});
  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Remove sample.txt',exact:true}).click();await expect(page.getByText('No active documents uploaded for this supplier.',{exact:true})).toBeVisible();
 });
+
+test('review dialog cannot close while a mocked evidence upload is busy',async({page})=>{
+  const stamp='2026-11-18T00:00:00Z';let revision=0,releaseUpload:()=>void=()=>{};
+  const uploadGate=new Promise<void>(resolve=>{releaseUpload=resolve;});
+  await page.route('**/api/projects**',async route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.includes('/evidence/')&&route.request().method()==='PUT'){await uploadGate;revision=1;return route.fulfill({json:{evidence_revision:revision}});}
+   if(route.request().method()!=='GET')return route.abort();
+   if(path.endsWith('/evidence'))return route.fulfill({json:{files:[],evidence_revision:revision,limits:{used_bytes:0,max_bytes:20971520,file_max_bytes:2097152,active_limit:10,stored_files:0,stored_file_limit:100}}});
+   if(path.endsWith('/eligibility'))return route.fulfill({json:{suppliers:[{id:'s1',name:'Supplier A',updated_at:stamp,evidence_revision:revision,checks:{},total_price:null,price_status:null,eligibility:'pending',revision:0,needs_review:false,reviewer:null,reviewed_at:null}],mandatory_checks:[],maximum_price:null,currency:'USD',criteria_revision:1,eligible_count:0,ready:false}});
+   return route.fulfill({json:{id:'p1',name:'Evidence test',reference:'P1',currency:'USD'}});
+  });
+  await page.goto('/#/projects/p1/eligibility');
+  const opener=page.getByRole('button',{name:'Review Supplier A',exact:true});await opener.click();
+  const dialog=page.getByRole('dialog',{name:'Review: Supplier A'});
+  await dialog.getByLabel('Choose evidence document').setInputFiles({name:'sample.txt',mimeType:'text/plain',buffer:Buffer.from('SYNTHETIC evidence')});
+  await dialog.getByRole('button',{name:'Upload Document'}).click();
+  await expect(dialog.getByRole('button',{name:'Close review'})).toBeDisabled();
+  await expect(dialog.getByRole('button',{name:'Cancel'})).toBeDisabled();
+  await expect(dialog.getByRole('button',{name:'Save Review'})).toBeDisabled();
+  await page.keyboard.press('Escape');await expect(dialog).toBeVisible();
+  releaseUpload();
+  await expect(dialog.getByText('Document uploaded and saved in cloud storage.',{exact:false})).toBeVisible();
+  await dialog.getByRole('button',{name:'Cancel'}).click();
+  await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();
+});
