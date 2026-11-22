@@ -663,6 +663,12 @@ dialog::backdrop { background:#0006; }
 .ahp-weighting .weighting-save-actions {margin:24px 0 0;padding:20px 0 0;background:none;border-radius:0;flex-wrap:wrap;gap:12px}
 .ahp-weighting .weighting-continue, .ahp-weighting .ahp-history {margin-top:24px;padding-top:20px;border-top:1px solid #f1f3fa}
 .ahp-weighting .weighting-methods button, .ahp-weighting .ahp-comparison-tools button, .ahp-weighting .ahp-calculate button, .ahp-weighting .weighting-save-actions button, .ahp-weighting .weighting-continue button {max-width:100%}
+.ai-weighting .weighting-methods {margin:24px 0}
+.ai-weighting .weighting-methods h3, .ai-weighting legend h3, .ai-weighting .ai-review h3 {margin:0 0 12px}
+.ai-weighting .ai-request details {margin-top:16px}
+.ai-weighting .ai-review, .ai-weighting .weighting-continue, .ai-weighting .ai-history {margin-top:24px;padding-top:20px;border-top:1px solid #f1f3fa}
+.ai-weighting .ai-save-actions {margin-top:20px}
+.ai-weighting .weighting-methods button, .ai-weighting .ai-request button, .ai-weighting .ai-save-actions button, .ai-weighting .weighting-continue button {max-width:100%}
 
 .eligibility-page .review-meta {display:block;margin-top:8px;font-size:11px}
 .eligibility-page .status-eligible {background:#ecfdf5;color:#047857}
