@@ -793,6 +793,17 @@ dialog::backdrop { background:#0006; }
 .sensitivity-page button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
 
 .decision-report p { overflow-wrap:anywhere; }
+.decision-report .report-actions {display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px}
+.decision-report .report-actions button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.decision-report .report-summary {padding:20px;margin-bottom:24px;border:1px solid #e5e9f4;border-radius:4px;background:white;overflow-wrap:anywhere}
+.decision-report .report-summary h2, .decision-report .report-summary h3 {overflow-wrap:anywhere}
+.decision-report .report-summary h3 {margin:20px 0 12px}
+.decision-report .report-summary p:not(.success) {margin:12px 0}
+.decision-report .report-summary-row {display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:8px;overflow-wrap:anywhere}
+.decision-report .report-summary-row > span {min-width:0;overflow-wrap:anywhere}
+@media(max-width:600px) {
+  .decision-report .report-summary-row {grid-template-columns:1fr;gap:2px}
+}
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
 .decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }
