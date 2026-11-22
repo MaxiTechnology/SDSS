@@ -771,6 +771,7 @@ dialog::backdrop { background:#0006; }
 .sensitivity-page .sensitivity-guidance {display:block}
 .sensitivity-page .sensitivity-guidance p {margin:0;overflow-wrap:anywhere}
 .sensitivity-page .sensitivity-guidance p + p {margin-top:8px}
+.sensitivity-page .sensitivity-notice:focus {outline:3px solid #779eff;outline-offset:3px}
 .sensitivity-page .sensitivity-weights {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px}
 .sensitivity-page .sensitivity-weights label {display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
 .sensitivity-page .sensitivity-weight-input {display:flex;align-items:baseline;gap:8px;margin-top:auto}
