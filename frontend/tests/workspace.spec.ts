@@ -41,3 +41,60 @@ test('Approver can read all workspace pages without preparation controls at phon
 });
 
 test('workspace load failure shows retry without invented records',async({page})=>{let fail=true;await page.route('**/api/workspace/suppliers',r=>r.fulfill(fail?{status:503,json:{detail:'Workspace storage unavailable'}}:{json:{projects:[],suppliers:[]}}));await page.goto('/#/suppliers');await expect(page.getByRole('alert')).toContainText('unavailable');await expect(page.getByText('No supplier entries match these filters.')).toHaveCount(0);fail=false;await page.getByRole('button',{name:'Try again',exact:true}).click();await expect(page.getByText('No supplier entries match these filters.')).toBeVisible();});
+
+for(const width of [1440,768,320])test(`evaluations table and filters remain usable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longName=`Synthetic project ${'LongName'.repeat(12)}`,supplierName=`Supplier ${'LongName'.repeat(10)}`;
+ const evaluations=Array.from({length:22},(_,i)=>({...evaluation,id:`p${i}`,name:i===0?longName:`Synthetic project ${i}`,reference:`PRJ-${i}`,workflow_status:i===1?'Needs review':'Approved',workflow_stage:i===0?'Review the current evaluation and next purchasing decision':'Decision',resume_path:`/projects/p${i}/decision`,evaluation_current:i!==1,calculation:i===21?null:{...evaluation.calculation,rows:[{id:'s1',name:supplierName,rank:1,score:'0.81234567'},{id:'s2',name:'Another supplier',rank:1,score:'0.81234567'},{id:'s3',name:'Not highest',rank:2,score:'0.2'}]}}));
+ let writes=0;
+ await page.route('**/api/workspace/**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{projects:evaluations}});});
+ await page.route('**/api/projects**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{id:'p0',name:longName,reference:'PRJ-0',currency:'USD'}});});
+ await page.route('**/api/auth/users',route=>route.fulfill({json:{users:[]}}));
+ await page.goto('/#/evaluations');
+ await expect(page.getByText('Scroll horizontally to see more evaluation details and actions.')).toBeVisible();
+ const table=page.getByRole('region',{name:'Workspace evaluations table'}),row=table.getByRole('row').filter({hasText:longName}),project=row.locator('td').first();
+ await expect(table.getByRole('row').nth(1)).toContainText(longName);
+ await expect(table.getByRole('row').nth(2)).toContainText('Synthetic project 1');
+ await expect(row.getByText('PRJ-0',{exact:true})).toBeAttached();
+ await expect(row.getByText(`${supplierName} · 0.812346`,{exact:true})).toBeAttached();
+ await expect(row.getByText('Another supplier · 0.812346',{exact:true})).toBeAttached();
+ await expect(row.getByText('Not highest',{exact:false})).toHaveCount(0);
+ const timestamp=await page.evaluate(value=>new Date(value).toLocaleString(),stamp);
+ await expect(row.locator('td').nth(2)).toContainText(timestamp);
+ await expect(row.getByText('Current calculation',{exact:true})).toBeAttached();
+ await expect(table.getByText('Needs recalculation',{exact:true}).first()).toBeAttached();
+ expect(await row.locator('td').nth(1).evaluate(el=>{const chip=el.querySelector('.chip')!.getBoundingClientRect(),stage=el.querySelector('p')!.getBoundingClientRect();return chip.bottom<=stage.top;})).toBe(true);
+ expect(await project.evaluate(el=>{const name=el.querySelector('strong')!.getBoundingClientRect(),reference=el.querySelector('small')!.getBoundingClientRect();return name.bottom<=reference.top&&el.scrollWidth<=el.clientWidth;})).toBe(true);
+ expect(await row.locator('td').evaluateAll(cells=>cells.every(cell=>cell.scrollWidth<=cell.clientWidth))).toBe(true);
+ const before=await project.boundingBox();expect(before).not.toBeNull();
+ await table.focus();expect(await table.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ if(await table.evaluate(el=>el.scrollWidth>el.clientWidth)){
+  await page.keyboard.press('ArrowRight');await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+  await table.evaluate(el=>{el.scrollLeft=(el.scrollWidth-el.clientWidth)/2;});
+ }
+ const middle=await project.boundingBox();expect(middle).not.toBeNull();expect(Math.abs(middle!.x-before!.x)).toBeLessThanOrEqual(1);
+ expect(await project.evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor}))).toEqual({position:'sticky',background:'rgb(255, 255, 255)'});
+ expect(await table.getByRole('columnheader',{name:'Project',exact:true}).evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(239, 244, 255)',z:3});
+ await table.focus();await page.keyboard.press('Tab');
+ for(const name of ['Continue Workflow','View Rankings','View Decision']){
+  const button=row.getByRole('button',{name,exact:true});await expect(button).toBeFocused();
+  const geometry=await button.evaluate(el=>{const table=el.closest('.table-scroll')!.getBoundingClientRect(),project=el.closest('tr')!.querySelector('td')!.getBoundingClientRect(),button=el.getBoundingClientRect();return {visible:button.left>=project.right-1&&button.right<=table.right+1,focus:getComputedStyle(el).outlineStyle,content:el.scrollWidth<=el.clientWidth,table:[table.left,table.right],project:[project.left,project.right],button:[button.left,button.right]};});
+  expect(geometry.visible,`${name}: ${JSON.stringify(geometry)}`).toBe(true);expect(geometry.focus).not.toBe('none');expect(geometry.content).toBe(true);
+  if(name!=='View Decision')await page.keyboard.press('Tab');
+ }
+ expect(await row.locator('.actions').evaluate(el=>{const buttons=Array.from(el.querySelectorAll('button'),b=>b.getBoundingClientRect());return buttons.every((a,i)=>buttons.slice(i+1).every(b=>a.bottom<=b.top));})).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await page.screenshot({path:`test-results/evaluations-layout-${width}.png`});
+ await expect(page.getByText('22 results',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(table.getByText('Synthetic project 21',{exact:true})).toBeAttached();
+ await expect(table.getByText('Not calculated',{exact:true})).toBeAttached();
+ const uncalculated=table.getByRole('row').filter({hasText:'Synthetic project 21'});
+ await expect(uncalculated.getByRole('button',{name:'Continue Workflow'})).toBeEnabled();
+ await expect(uncalculated.getByRole('button',{name:'View Rankings'})).toHaveCount(0);
+ await expect(uncalculated.getByRole('button',{name:'View Decision'})).toHaveCount(0);
+ await page.getByLabel('Search evaluations').fill('PRJ-0');await expect(table.getByRole('row')).toHaveCount(2);
+ await page.getByLabel('Search evaluations').fill('');await page.getByLabel('Filter evaluations by status').selectOption('Needs review');await expect(table.getByRole('row')).toHaveCount(2);
+ await page.getByLabel('Filter evaluations by status').selectOption('');await page.getByLabel('Filter evaluations by calculation').selectOption('no');await expect(table.getByText('Synthetic project 21',{exact:true})).toBeAttached();
+ await page.getByLabel('Filter evaluations by calculation').selectOption('');await row.getByRole('button',{name:'View Rankings',exact:true}).click();await expect(page).toHaveURL(/projects\/p0\/rankings$/);
+ expect(writes).toBe(0);
+});
