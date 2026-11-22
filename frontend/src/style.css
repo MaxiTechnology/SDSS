@@ -753,6 +753,21 @@ dialog::backdrop { background:#0006; }
   .evaluations-page .table-scroll .actions button {max-width:calc(100vw - 200px)}
 }
 
+.rankings-page .rankings-summary {margin:16px 0 20px}
+.rankings-page .rankings-summary p {overflow-wrap:anywhere}
+.rankings-page .rankings-summary .success, .rankings-page .rankings-summary .error {margin:0 0 12px}
+.rankings-page .rankings-summary p:last-child {margin:0}
+.rankings-page .table-scroll table {table-layout:fixed;min-width:280px}
+.rankings-page .table-scroll th, .rankings-page .table-scroll td {padding:14px 16px;white-space:normal;overflow-wrap:anywhere}
+.rankings-page .table-scroll td {border-bottom:1px solid #e5e9f4}
+.rankings-page .table-scroll th:first-child, .rankings-page .table-scroll td:first-child {width:64px;text-align:right;font-variant-numeric:tabular-nums}
+.rankings-page .table-scroll th:last-child, .rankings-page .table-scroll td:last-child {width:128px;text-align:right;font-variant-numeric:tabular-nums}
+.rankings-page .rankings-details, .rankings-page .rankings-navigation, .rankings-page .rankings-analysis, .rankings-page .rankings-continuation {margin-top:24px}
+.rankings-page .rankings-details summary:focus-visible {outline:3px solid #779eff;outline-offset:3px}
+.rankings-page .rankings-analysis, .rankings-page .rankings-continuation {padding-top:20px;border-top:1px solid #f1f3fa}
+.rankings-page .rankings-analysis h3 {margin:0 0 12px}
+.rankings-page .rankings-navigation button, .rankings-page .rankings-analysis button, .rankings-page .rankings-continuation button {max-width:100%}
+
 .decision-report p { overflow-wrap:anywhere; }
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
