@@ -804,6 +804,27 @@ dialog::backdrop { background:#0006; }
 @media(max-width:600px) {
   .decision-report .report-summary-row {grid-template-columns:1fr;gap:2px}
 }
+.decision-report .report-detail {margin:24px 0;padding-top:20px;border-top:1px solid #e5e9f4}
+.decision-report .report-detail h3 {margin:0 0 12px}
+.decision-report .report-project dl {margin:0}
+.decision-report .report-project dl > div {display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:8px;margin:12px 0}
+.decision-report .report-project dt, .decision-report .report-project dd {min-width:0;overflow-wrap:anywhere}
+.decision-report .report-project dd {margin:0;color:#565d79}
+.decision-report .report-detail table {min-width:600px}
+.decision-report .report-detail th, .decision-report .report-detail td {padding:14px 16px;white-space:normal;overflow-wrap:anywhere}
+.decision-report .report-detail td {border-bottom:1px solid #e5e9f4}
+.decision-report .report-criteria table {min-width:720px}
+.decision-report .report-values table {min-width:800px}
+.decision-report .report-criteria th, .decision-report .report-criteria td, .decision-report .report-values th, .decision-report .report-values td {overflow-wrap:normal}
+.decision-report .report-criteria td:first-child, .decision-report .report-values td:first-child, .decision-report .report-values td:nth-child(2) {overflow-wrap:anywhere}
+.decision-report .report-criteria th:first-child, .decision-report .report-values th:first-child, .decision-report .report-values th:nth-child(2) {min-width:200px}
+.decision-report .report-criteria th:nth-child(2), .decision-report .report-values th:last-child {min-width:100px}
+.decision-report .report-criteria th:nth-child(3) {min-width:140px}
+.decision-report .report-values th:nth-child(3) {min-width:160px}
+.decision-report .report-rankings th:first-child, .decision-report .report-rankings td:first-child, .decision-report .report-rankings th:last-child, .decision-report .report-rankings td:last-child, .decision-report .report-criteria th:last-child, .decision-report .report-criteria td:last-child, .decision-report .report-values th:nth-child(3), .decision-report .report-values td:nth-child(3) {text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:600px) {
+  .decision-report .report-project dl > div {grid-template-columns:1fr;gap:2px}
+}
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
 .decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }
