@@ -33,6 +33,29 @@ test('criteria templates preserve capture retries, preview confirmation and appl
  await page.getByRole('button',{name:'Preview and Apply',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Target project',{exact:true}).selectOption('p2');await dialog.getByRole('button',{name:'Load Application Preview',exact:true}).click();await expect(dialog.getByRole('button',{name:'Apply as Draft',exact:true})).toBeDisabled();await expect(dialog).toContainText('Saved decision reports remain unchanged.');await dialog.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights.").check();await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('Apply response uncertain');await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog).not.toBeVisible();expect(appliedIds[0]).toBe(appliedIds[1]);await expect(page.getByRole('button',{name:'Open draft weights',exact:true})).toBeVisible();
 });
 
+for(const width of [1440,320])test(`reusable template form layout and keyboard order at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longName=`Synthetic project ${'LongName'.repeat(12)}`,sourceProjects=[{...projects[0],name:longName},{...projects[0],id:'draft',name:'Draft weights',weights_approved:false},{...projects[1],id:'unavailable'}];
+ let writes=0;
+ await page.route('**/api/workspace/templates**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{projects:sourceProjects,templates:[]}});});
+ await page.goto('/#/criteria');
+ const form=page.locator('form.template-create'),details=form.getByRole('group',{name:'Template details'}),weights=form.getByRole('group',{name:'Suggested weights'});
+ const source=details.getByLabel('Source project',{exact:true}),name=details.getByLabel('New template name',{exact:true}),notes=details.getByLabel('New template notes',{exact:true}),checkbox=weights.getByLabel("Include the source project's currently approved weight values"),save=form.getByRole('button',{name:'Save Reusable Template'}),reset=form.getByRole('button',{name:'Reset Template Form'});
+ await expect(source.locator('option')).toHaveCount(3);await expect(source.locator('option[value="p1"]')).toHaveText(`PRJ-ONE — ${longName}`);
+ await expect(source).toHaveAttribute('required','');await expect(name).toHaveAttribute('required','');await expect(name).toHaveAttribute('maxlength','100');await expect(notes).toHaveAttribute('maxlength','2000');
+ await expect(checkbox).toBeDisabled();await expect(save).toBeDisabled();await source.selectOption('draft');await expect(checkbox).toBeDisabled();await source.selectOption('p1');await expect(checkbox).toBeEnabled();await expect(save).toBeEnabled();
+ const selection=form.locator('.template-source-selection');await expect(selection).toHaveText(`PRJ-ONE — ${longName}`);
+ expect(await selection.evaluate(el=>el.scrollWidth<=el.clientWidth&&el.getBoundingClientRect().height>parseFloat(getComputedStyle(el).fontSize)*2)).toBe(true);
+ await name.fill('Synthetic template');await notes.fill('Synthetic notes');
+ await source.focus();for(const control of [name,notes,checkbox,save,reset]){await page.keyboard.press('Tab');await expect(control).toBeFocused();expect(await control.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');}
+ const help=weights.getByText('Values are copied as suggestions for the next project. They will require fresh approval.');
+ expect(await weights.evaluate(el=>{const label=el.querySelector('label')!.getBoundingClientRect(),help=el.querySelector('p')!.getBoundingClientRect();return label.bottom<=help.top&&help.top-label.bottom<=12;})).toBe(true);
+ expect(await form.locator('label, input, select, textarea, button, .template-source-selection').evaluateAll(elements=>elements.every(el=>{const box=el.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth+1&&el.scrollWidth<=el.clientWidth;}))).toBe(true);
+ await expect(help).toBeVisible();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await checkbox.check();await form.screenshot({path:`test-results/template-create-${width}.png`});await reset.click();
+ await expect(source).toHaveValue('');await expect(name).toHaveValue('');await expect(notes).toHaveValue('');await expect(checkbox).not.toBeChecked();await expect(checkbox).toBeDisabled();await expect(save).toBeDisabled();expect(writes).toBe(0);
+});
+
 for(const width of [1440,1024,320])test(`criteria overview preserves details and navigation at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:850});
  const longName=`Synthetic project ${'LongName'.repeat(12)}`;
