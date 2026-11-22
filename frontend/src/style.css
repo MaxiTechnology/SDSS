@@ -661,6 +661,25 @@ dialog::backdrop { background:#0006; }
 @media(max-height:450px) {
   .add-global-supplier-dialog .dialog-heading,.add-global-supplier-dialog .dialog-footer {padding:12px 16px}
 }
+.template-editor-dialog[open] {display:flex;flex-direction:column;max-height:calc(100dvh - 24px);overflow:hidden}
+.template-editor-dialog form {display:flex;flex:1 1 auto;flex-direction:column;min-height:0}
+.template-editor-dialog .dialog-heading,.template-editor-dialog .dialog-footer {flex:none;gap:12px}
+.template-editor-dialog .dialog-heading h2 {margin:0;min-width:0;overflow-wrap:anywhere}
+.template-editor-dialog .dialog-heading button {flex:none}
+.template-editor-dialog .dialog-body {min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding-block:12px}
+.template-editor-dialog .dialog-body > p {font-size:13px;line-height:1.5}
+.template-editor-dialog label {margin:16px 0}
+.template-editor-dialog input:not([type=checkbox]),.template-editor-dialog textarea {display:block;width:100%;margin-top:8px}
+.template-editor-dialog .inline-check {display:flex;align-items:flex-start;gap:10px}
+.template-editor-dialog .inline-check input {width:18px;flex:none}
+.template-editor-dialog .dialog-footer {flex-wrap:wrap}
+.template-editor-dialog .dialog-footer .primary {margin-left:auto}
+@media(max-width:700px) {
+  .template-editor-dialog .dialog-footer {padding-inline:16px;gap:8px}
+}
+@media(max-height:450px) {
+  .template-editor-dialog .dialog-heading,.template-editor-dialog .dialog-footer {padding:12px 16px}
+}
 @media(max-width:700px) { .supplier-footer {flex-direction:column;} .supplier-page .card-heading {align-items:flex-start; gap:12px;} }
 .criteria-grid {display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;margin-bottom:24px}
 .criterion-editor h2,.mandatory-settings h2 {margin-top:0}

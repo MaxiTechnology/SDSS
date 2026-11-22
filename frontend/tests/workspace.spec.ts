@@ -20,6 +20,60 @@ test('workspace navigation, supplier search/copy, evaluation filters and version
  await nav.getByRole('button',{name:'Reports',exact:true}).click();await expect(page.getByRole('region',{name:'Workspace reports table'}).getByRole('row')).toHaveCount(2);await page.getByLabel('Latest saved version per project').uncheck();await expect(page.getByRole('region',{name:'Workspace reports table'}).getByRole('row')).toHaveCount(3);await page.getByLabel('Latest saved version per project').check();await page.getByRole('button',{name:'Download PDF',exact:true}).click();await expect(page.getByRole('alert')).toContainText('temporarily unavailable');const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download PDF',exact:true}).click();expect((await download).suggestedFilename()).toBe('SSDSS-decision-d1-v2.pdf');await page.getByRole('button',{name:'Open Saved Report',exact:true}).click();await expect(page).toHaveURL(/projects\/p1\/reports\/d1/);
 });
 
+for(const viewport of [{width:1440,height:850},{width:320,height:850},{width:320,height:320}])test(`template details editor layout and accessibility at ${viewport.width}x${viewport.height}`,async({page})=>{
+ await page.setViewportSize(viewport);
+ const longName=`Synthetic template ${'LongName'.repeat(10)}`,edited={...template,id:'t2',name:longName,notes:'Synthetic notes '.repeat(30)},attempts:{name:string;notes:string;active:boolean;expected_version:number}[]=[];
+ let release!:()=>void;const gate=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/**',route=>route.request().url().endsWith('/api/auth/session')?route.fallback():route.abort());
+ await page.route('**/api/projects',route=>route.fulfill({json:[]}));
+ await page.route('**/api/workspace/templates**',async route=>{
+  const request=route.request(),path=new URL(request.url()).pathname;
+  if(request.method()==='GET'&&path==='/api/workspace/templates')return route.fulfill({json:{projects,templates:[template,edited]}});
+  if(request.method()==='PUT'&&path==='/api/workspace/templates/t2'){
+   attempts.push(request.postDataJSON());
+   if(attempts.length===1){await gate;return route.fulfill({status:503,json:{detail:'Synthetic edit unavailable'}});}
+   return route.fulfill({json:{...edited,...attempts[1]}});
+  }
+  return route.abort();
+ });
+ await page.goto('/#/criteria');
+ const opener=page.locator('.template-card').nth(1).getByRole('button',{name:'Edit Template Details'}),dialog=page.getByRole('dialog',{name:'Edit template details'});
+ await opener.click();
+ const close=dialog.getByRole('button',{name:'Close dialog'}),name=dialog.getByLabel('Template name',{exact:true}),notes=dialog.getByLabel('Template notes',{exact:true}),active=dialog.getByLabel('Available for new applications'),cancel=dialog.getByRole('button',{name:'Cancel'}),save=dialog.getByRole('button',{name:'Save Template Details'});
+ const body=dialog.locator('.dialog-body'),header=dialog.locator('.dialog-heading'),footer=dialog.locator('.dialog-footer');
+ await expect(close).toBeFocused();await expect(name).toHaveValue(longName);await expect(notes).toHaveValue(edited.notes);await expect(active).toBeChecked();
+ await expect(name).toHaveAttribute('required','');await expect(name).toHaveAttribute('maxlength','100');await expect(name).toHaveJSProperty('type','text');await expect(notes).toHaveAttribute('maxlength','2000');
+ await expect(dialog.getByText('The saved configuration is fixed. To change criteria or weights, update a project and save a new template.')).toBeVisible();
+ const startHeader=await header.boundingBox(),startFooter=await footer.boundingBox();
+ if(viewport.height===320)await dialog.screenshot({path:'test-results/template-editor-short-top.png'});
+ await body.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const endHeader=await header.boundingBox(),endFooter=await footer.boundingBox();
+ expect(Math.abs(startHeader!.y-endHeader!.y)).toBeLessThanOrEqual(1);expect(Math.abs(startFooter!.y-endFooter!.y)).toBeLessThanOrEqual(1);
+ expect(endFooter!.y+endFooter!.height).toBeLessThanOrEqual(viewport.height);expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ const cancelBox=(await cancel.boundingBox())!,saveBox=(await save.boundingBox())!;expect(cancelBox.x+cancelBox.width).toBeLessThanOrEqual(saveBox.x);
+ if(viewport.height===320)await dialog.screenshot({path:'test-results/template-editor-short-bottom.png'});
+ await close.focus();
+ for(const field of [name,notes,active,cancel,save,close]){
+  await page.keyboard.press('Tab');await expect(field).toBeFocused();expect(await field.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+  if(await field.evaluate(el=>!!el.closest('.dialog-body')))expect(await field.evaluate(el=>{const box=el.closest('label')!.getBoundingClientRect(),body=el.closest('.dialog-body')!.getBoundingClientRect();return box.top>=body.top-1&&box.bottom<=body.bottom+1;})).toBe(true);
+  if(viewport.height===320&&field===notes)await dialog.screenshot({path:'test-results/template-editor-short-focused-notes.png'});
+ }
+ await page.keyboard.press('Shift+Tab');await expect(save).toBeFocused();await page.keyboard.press('Tab');await expect(close).toBeFocused();
+ await name.focus();await page.keyboard.press('End');expect(await name.evaluate((el:HTMLInputElement)=>el.selectionStart)).toBe(longName.length);await page.keyboard.press('Home');expect(await name.evaluate((el:HTMLInputElement)=>el.selectionStart)).toBe(0);await expect(name).toHaveValue(longName);
+ await name.fill('Unsaved synthetic name');await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(opener).toBeFocused();
+ await opener.click();await expect(name).toHaveValue(longName);await cancel.click();await expect(opener).toBeFocused();
+ await opener.click();await close.click();await expect(opener).toBeFocused();
+ await opener.click();await name.fill('');await save.click();expect(attempts).toHaveLength(0);await expect(name).toBeFocused();
+ await name.fill(longName);await active.uncheck();await name.press('Enter');await expect.poll(()=>attempts.length).toBe(1);
+ expect(attempts[0]).toEqual({name:longName,notes:edited.notes,active:false,expected_version:template.version});
+ await expect(name).toBeDisabled();await expect(notes).toBeDisabled();await expect(active).toBeDisabled();await expect(save).toBeDisabled();await expect(cancel).toBeDisabled();await expect(close).toBeDisabled();
+ await page.keyboard.press('Escape');await expect(dialog).toBeVisible();await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
+ release();const alert=dialog.getByRole('alert');await expect(alert).toContainText('Synthetic edit unavailable');await expect(alert).toBeFocused();
+ expect(await alert.evaluate(el=>{const box=el.getBoundingClientRect(),body=el.closest('.dialog-body')!.getBoundingClientRect();return box.top>=body.top-1&&box.bottom<=body.bottom+1;})).toBe(true);
+ await expect(name).toHaveValue(longName);await expect(notes).toHaveValue(edited.notes);await expect(active).not.toBeChecked();
+ await save.click();await expect(dialog).toHaveCount(0);await expect(opener).toBeFocused();expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
+});
+
 test('criteria templates preserve capture retries, preview confirmation and application identity',async({page})=>{
  let templates:any[]=[],captureFail=true,applyFail=true,ids:string[]=[],appliedIds:string[]=[];
  await page.route('**/api/workspace/templates**',async r=>{
