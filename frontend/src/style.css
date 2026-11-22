@@ -630,6 +630,22 @@ dialog::backdrop { background:#0006; }
 .dialog-body input,.dialog-body textarea { border:1px solid #d7ddea; background:#f8f9ff; }
 .dialog-body small,.dialog-body p { color:#565d79; font-size:11px; }
 .dialog-footer { border-top:1px solid #e5e9f4; }
+.copy-supplier-dialog[open] {display:flex;flex-direction:column;max-height:calc(100dvh - 24px);overflow:hidden}
+.copy-supplier-dialog form {display:flex;flex:1 1 auto;flex-direction:column;min-height:0}
+.copy-supplier-dialog .dialog-heading, .copy-supplier-dialog .dialog-footer {flex:none;gap:12px}
+.copy-supplier-dialog .dialog-heading h2 {margin:0;min-width:0;overflow-wrap:anywhere}
+.copy-supplier-dialog .dialog-heading button {flex:none}
+.copy-supplier-dialog .dialog-body {min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding-block:12px}
+.copy-supplier-dialog .dialog-body > p {font-size:13px;line-height:1.5}
+.copy-supplier-dialog .dialog-body .info {margin:0 0 20px}
+.copy-supplier-dialog .copy-group + .copy-group {margin-top:24px}
+.copy-supplier-dialog .copy-group legend {font-size:14px;font-weight:600}
+.copy-supplier-dialog .copy-group label {margin:12px 0 0}
+.copy-supplier-dialog .dialog-footer {flex-wrap:wrap}
+.copy-supplier-dialog .dialog-footer .primary {margin-left:auto}
+@media(max-height:450px) {
+  .copy-supplier-dialog .dialog-heading, .copy-supplier-dialog .dialog-footer {padding:12px 16px}
+}
 @media(max-width:700px) { .supplier-footer {flex-direction:column;} .supplier-page .card-heading {align-items:flex-start; gap:12px;} }
 .criteria-grid {display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;margin-bottom:24px}
 .criterion-editor h2,.mandatory-settings h2 {margin-top:0}
