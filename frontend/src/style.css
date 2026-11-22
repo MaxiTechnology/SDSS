@@ -1023,6 +1023,18 @@ aside { overflow-y: auto; }
 @media(max-width:700px) {
   .account-create .fields {grid-template-columns:1fr}
 }
+.account-edit h2 {overflow-wrap:anywhere}
+.account-edit .account-edit-details {margin-top:24px}
+.account-edit .account-edit-details legend {font-size:16px;font-weight:600}
+.account-edit .fields {gap:16px 24px;margin-top:12px}
+.account-edit .fields label {margin:0}
+.account-edit .account-edit-actions {margin-top:24px;padding-top:20px;border-top:1px solid #e5e9f4}
+.account-edit .account-edit-reset {margin-top:24px;padding:20px;border:1px solid #e5e9f4;border-radius:8px}
+.account-edit .account-edit-reset h3 {margin:0}
+.account-edit .account-edit-reset label {margin:16px 0}
+@media(max-width:700px) {
+  .account-edit .fields {grid-template-columns:1fr}
+}
 .auth-page{max-width:560px;margin:5vh auto;padding:20px}.auth-page .project-form{padding:28px}.auth-page fieldset{border:0;padding:0;min-width:0}.auth-page label,.account-editor label{display:block;margin:16px 0}.auth-page input,.account-editor input,.account-editor select{display:block;width:100%;margin-top:8px}.account-editor{margin-top:24px;padding:24px}.account-editor .inline-check{display:flex;align-items:center;gap:10px}.account-editor input[type=checkbox]{width:18px;margin:0}.session-actions{display:flex;gap:8px;flex-wrap:wrap}.workspace>header{height:auto;min-height:72px;flex-wrap:wrap;padding-top:12px;padding-bottom:12px;gap:12px}.role-view{border:0;padding:0;margin:0;min-width:0}.role-view:disabled{opacity:1}.auth-page .actions{flex-wrap:wrap}@media(max-width:900px){.workspace>header .global-search{flex-basis:100%;max-width:none}.workspace>header .user{display:block}.session-actions button{padding:8px}.auth-page{margin:0 auto;padding:12px}}
 
 .workspace-section{min-width:0}.workspace-section>.secondary{margin-bottom:16px}.workspace-section .toolbar{flex-wrap:wrap;gap:16px;margin:20px 0}.workspace-section .toolbar>label{min-width:160px;flex:1}.workspace-section .toolbar input:not([type=checkbox]),.workspace-section .toolbar select{display:block;width:100%;margin-top:8px}.workspace-section .toolbar>.inline-check{display:flex;align-items:center;gap:8px}.workspace-section .inline-check input{width:18px;flex:none}.workspace-section .actions{flex-wrap:wrap;gap:8px}.workspace-section .table-scroll table{min-width:760px}.workspace-form{padding:24px;margin:20px 0}.workspace-form fieldset{border:0;padding:0;min-width:0}.workspace-form label{display:block;margin:16px 0}.workspace-form input:not([type=checkbox]),.workspace-form select,.workspace-form textarea{display:block;width:100%;margin-top:8px}.workspace-form .inline-check{display:flex;align-items:flex-start;gap:10px}.workspace-form input[type=checkbox]{width:18px;flex:none}.workspace-form .actions{display:flex;flex-wrap:wrap;gap:10px}.template-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:20px;margin:20px 0}.template-card{padding:24px;min-width:0}.template-card details{margin:16px 0}.template-card .actions{margin-top:16px}.template-details .table-scroll table{min-width:560px}.template-details{min-width:0;overflow-wrap:anywhere}.success-text{color:#006d60}.warning-text{color:#9a4800}@media(max-width:700px){.main-navigation{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.main-navigation button{min-width:0}.workspace-form,.template-card{padding:16px}.workspace-section .toolbar>label{flex-basis:100%;min-width:0}.workspace-section .toolbar>.inline-check{max-width:100%}}

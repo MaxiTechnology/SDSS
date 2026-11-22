@@ -11,7 +11,26 @@ export function Accounts(){
  return <section><p>All active users share this procurement workspace. Roles control which actions they can perform.</p>{state.loading&&<p role="status">{state.data?'Refreshing accounts…':'Loading accounts…'}</p>}{state.error&&<p role="alert" className="error">{state.error}</p>}{error&&<p role="alert" className="error">{error}</p>}{notice&&<p role="status" className="success">{notice}</p>}
 <section className="accounts-list"><h2>Existing accounts</h2><button className="secondary" disabled={busy} onClick={()=>void load()}>Refresh Accounts</button><div className="table-card table-scroll" role="region" aria-label="User accounts table" tabIndex={0}><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td>{row.display_name}</td><td>{row.username}</td><td>{roleName(row.role)}</td><td><span className="chip account-status" data-status={row.active?'active':'disabled'}>{row.active?'Active':'Disabled'}</span>{row.must_change?' · Initial password':''}</td><td><button className="secondary" disabled={busy||state.loading||!!state.error} onClick={()=>{setSelected({...row});setReset('');setError('');}}>Edit {row.username}</button></td></tr>)}</tbody></table></div></section>
 
- {selected&&<form className="project-form account-editor" onSubmit={save}><h2>Edit {selected.username}</h2><p>Role, name or status changes end this account’s current sessions. At least one administrator must remain active.</p><fieldset disabled={busy}><label>Display name<input required maxLength={100} value={selected.display_name} onChange={e=>setSelected({...selected,display_name:e.target.value})}/></label><label>Account role<select aria-label="Account role" value={selected.role} onChange={e=>setSelected({...selected,role:e.target.value as User['role']})}>{roles.map(role=><option key={role} value={role}>{roleName(role)}</option>)}</select></label><label className="inline-check"><input type="checkbox" checked={selected.active} onChange={e=>setSelected({...selected,active:e.target.checked})}/>Account active</label><div className="actions"><button className="primary">Save Account</button><button type="button" className="secondary" onClick={()=>{setSelected(null);setReset('');}}>Cancel Account Edit</button></div>{selected.id!==user.id&&<><h3>Reset this account’s password</h3><label>New initial password<input type="password" autoComplete="new-password" minLength={15} maxLength={128} value={reset} onChange={e=>setReset(e.target.value)}/></label><button type="button" className="secondary" disabled={reset.length<15} onClick={()=>void resetPassword()}>Reset Initial Password</button></>}</fieldset></form>}
+ {selected&&<form className="project-form account-editor account-edit" onSubmit={save}>
+  <h2>Edit {selected.username}</h2>
+  <p>Role, name or status changes end this account’s current sessions. At least one administrator must remain active.</p>
+  <fieldset disabled={busy}>
+   <fieldset className="account-edit-details">
+    <legend>Account details</legend>
+    <div className="fields">
+     <label>Display name<input required maxLength={100} value={selected.display_name} onChange={e=>setSelected({...selected,display_name:e.target.value})}/></label>
+     <label>Account role<select aria-label="Account role" value={selected.role} onChange={e=>setSelected({...selected,role:e.target.value as User['role']})}>{roles.map(role=><option key={role} value={role}>{roleName(role)}</option>)}</select></label>
+    </div>
+    <label className="inline-check"><input type="checkbox" checked={selected.active} onChange={e=>setSelected({...selected,active:e.target.checked})}/>Account active</label>
+   </fieldset>
+   <div className="actions account-edit-actions"><button className="primary">Save Account</button><button type="button" className="secondary" onClick={()=>{setSelected(null);setReset('');}}>Cancel Account Edit</button></div>
+   {selected.id!==user.id&&<section className="account-edit-reset">
+    <h3>Reset this account’s password</h3>
+    <label>New initial password<input type="password" autoComplete="new-password" minLength={15} maxLength={128} value={reset} onChange={e=>setReset(e.target.value)}/></label>
+    <button type="button" className="secondary" disabled={reset.length<15} onClick={()=>void resetPassword()}>Reset Initial Password</button>
+   </section>}
+  </fieldset>
+ </form>}
  <form className="project-form account-editor account-create" onSubmit={create}>
   <h2>Create account</h2>
   <fieldset disabled={busy}>

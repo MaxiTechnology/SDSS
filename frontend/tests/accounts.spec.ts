@@ -84,3 +84,38 @@ for(const width of [1440,320])test(`create account groups and keyboard order at 
  for(const field of [name,role,initialField,confirmation,submit]){await page.keyboard.press('Tab');await expect(field).toBeFocused();expect(await field.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');}
  expect(writes).toBe(0);
 });
+
+for(const width of [1440,320])test(`account edit layout and keyboard order at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longUsername=`test_${'longusername'.repeat(6)}`;
+ const users=[
+  {id:'u1',username:longUsername,display_name:'Synthetic User',role:'officer',active:true,must_change:false,updated_at:'2026-11-19T00:00:00Z'},
+  {id:'00000000-0000-4000-8000-000000000001',username:'test-admin',display_name:'Test Administrator',role:'administrator',active:true,must_change:false,updated_at:'2026-11-19T00:00:00Z'}
+ ];
+ let writes=0;
+ await page.route('**/api/auth/users**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{users}});});
+ await page.goto('/#/accounts');
+ await page.getByRole('button',{name:`Edit ${longUsername}`,exact:true}).click();
+ const form=page.locator('form.account-edit'),heading=form.getByRole('heading',{name:`Edit ${longUsername}`,exact:true}),details=form.getByRole('group',{name:'Account details'});
+ const display=details.getByLabel('Display name',{exact:true}),role=details.getByLabel('Account role',{exact:true}),active=details.getByLabel('Account active',{exact:true});
+ const save=form.getByRole('button',{name:'Save Account',exact:true}),cancel=form.getByRole('button',{name:'Cancel Account Edit',exact:true});
+ const resetSection=form.locator('.account-edit-reset'),resetField=resetSection.locator('input'),resetButton=resetSection.getByRole('button');
+ await expect(heading).toBeVisible();await expect(form.getByText('Role, name or status changes end this account’s current sessions. At least one administrator must remain active.')).toBeVisible();
+ await expect(display).toHaveValue('Synthetic User');await expect(display).toHaveAttribute('required','');await expect(display).toHaveAttribute('maxlength','100');
+ await expect(role).toHaveValue('officer');await expect(active).toBeChecked();
+ await expect(resetField).toHaveAttribute('type','password');await expect(resetField).toHaveAttribute('autocomplete','new-password');await expect(resetField).toHaveAttribute('minlength','15');await expect(resetField).toHaveAttribute('maxlength','128');await expect(resetButton).toBeDisabled();
+ const boxes=await Promise.all([display,role,active,save,resetSection,resetField,resetButton].map(element=>element.boundingBox()));
+ expect(boxes.every(box=>box!==null)).toBe(true);
+ if(width===320)expect(boxes[1]!.y).toBeGreaterThanOrEqual(boxes[0]!.y+boxes[0]!.height);
+ else expect(boxes[0]!.y).toBe(boxes[1]!.y);
+ expect(boxes[3]!.y).toBeGreaterThan(boxes[2]!.y+boxes[2]!.height);expect(boxes[4]!.y).toBeGreaterThan(boxes[3]!.y+boxes[3]!.height);
+ expect(boxes[6]!.y).toBeGreaterThan(boxes[5]!.y+boxes[5]!.height);
+ expect(await resetSection.evaluate(el=>getComputedStyle(el).borderTopStyle)).toBe('solid');
+ expect(await heading.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await form.screenshot({path:`test-results/account-edit-${width}.png`});
+ await display.focus();
+ for(const field of [role,active,save,cancel,resetField]){await page.keyboard.press('Tab');await expect(field).toBeFocused();expect(await field.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');}
+ await cancel.click();await page.getByRole('button',{name:'Edit test-admin',exact:true}).click();await expect(page.locator('form.account-edit .account-edit-reset')).toHaveCount(0);
+ expect(writes).toBe(0);
+});
