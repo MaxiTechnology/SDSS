@@ -139,6 +139,52 @@ for(const width of [1440,320])test(`saved AI assistance remains readable at ${wi
  expect(writes).toBe(0);expect(aiRequests).toBe(0);
 });
 
+for(const width of [1440,320])test(`saved sensitivity text remains unchanged and readable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:800});
+ const long=`Synthetic${'LongScenario'.repeat(12)}`;
+ const lines=[
+  'Saved weight scenarios for this decision baseline. These are selected tests, not proof of stability across all possible weights. Approved weights and the purchasing decision are unchanged by simulation.',
+  `Scenario: ${long} | Saved: 2026-11-18T12:34:56Z | By: Historical Reviewer | By: name`,
+  'Weights: Cost; special: 90.1250%; Quality: 9.8750%',
+  'Highest-ranked supplier set changed.',
+  'Results: Beta; Division: baseline rank 2, scenario rank 1, score 0.900000; Alpha: baseline rank 1, scenario rank 2, score 0.100000',
+  `Notes: ${long}; Results: text is not structured`,
+  '',
+  'Scenario: Second | Saved: 2026-11-17T00:00:00Z | By: Second Reviewer',
+  'Weights: Cost: 10%; Quality: 90%',
+  'Highest-ranked supplier set unchanged.',
+  'Results: Alpha: baseline rank 1, scenario rank 1, score 0.800000',
+  'Notes: No additional notes.'
+ ];
+ let sensitivity=lines.join('\n'),writes=0;
+ await page.route('**/api/workspace/**',route=>route.fulfill({json:{}}));
+ await page.route('**/api/projects**',route=>{
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  if(new URL(route.request().url()).pathname.endsWith('/report'))return route.fulfill({json:{...report,sensitivity}});
+  return route.fulfill({json:{id:'p1',reference:'P1',name:'Test',currency:'USD'}});
+ });
+ await page.goto('/#/projects/p1/reports/d1');
+ const section=page.locator('.report-sensitivity');
+ await expect(section.getByRole('heading',{name:'Sensitivity analysis'})).toBeVisible();
+ const text=section.locator('p');
+ await expect(text).toHaveCount(1);
+ await expect.poll(()=>text.textContent()).toBe(sensitivity);
+ expect(await text.evaluate(el=>{
+  if(getComputedStyle(el).whiteSpace!=='pre-wrap'||!el.firstChild)return false;
+  const content=el.textContent||'',start=content.indexOf('Highest-ranked supplier set changed.'),next=content.indexOf('Results: Beta; Division:');
+  if(start<0||next<0)return false;
+  const range=document.createRange();range.setStart(el.firstChild,start);range.setEnd(el.firstChild,start+1);const first=range.getBoundingClientRect();
+  range.setStart(el.firstChild,next);range.setEnd(el.firstChild,next+1);return range.getBoundingClientRect().top>first.top;
+ })).toBe(true);
+ await expect(section.locator('xpath=following-sibling::*[1]')).toHaveText(report.notice);
+ expect(await section.evaluate(el=>[el,...el.querySelectorAll('h3,p')].every(item=>item.scrollWidth<=item.clientWidth))).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await section.screenshot({path:`test-results/report-sensitivity-${width}.png`});
+ sensitivity=report.sensitivity;await page.reload();
+ await expect.poll(()=>text.textContent()).toBe(report.sensitivity);
+ expect(writes).toBe(0);
+});
+
 for(const width of [1440,320])test(`saved report detail sections remain readable at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:800});
  const longSupplier=`Supplier ${'LongName'.repeat(12)}`,longCriterion=`Criterion ${'LongName'.repeat(12)}`;

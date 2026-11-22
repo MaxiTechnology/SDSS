@@ -846,6 +846,9 @@ dialog::backdrop { background:#0006; }
 .decision-report .report-evidence button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .decision-report .report-eligibility ul {list-style:none;padding:0;margin:0}
 .decision-report .report-eligibility li {padding:12px 16px;border:1px solid #e5e9f4;border-radius:4px;background:white;margin:8px 0}
+.decision-report .report-sensitivity {margin:24px 0;padding-top:20px;border-top:1px solid #e5e9f4;overflow-wrap:anywhere}
+.decision-report .report-sensitivity h3 {margin:0 0 16px}
+.decision-report .report-sensitivity p {padding:12px 16px;margin:8px 0;border:1px solid #e5e9f4;border-radius:4px;background:white;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:600px) {
   .decision-report .report-evidence dl > div {grid-template-columns:1fr;gap:2px}
 }
