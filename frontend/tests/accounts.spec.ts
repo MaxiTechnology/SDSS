@@ -12,3 +12,43 @@ test('administrator creates a role-specific account, retries safely and resets i
  await page.setViewportSize({width:375,height:850});await page.goto('/#/accounts');await expect(page.getByRole('button',{name:'Create Project',exact:true})).toHaveCount(0);await page.getByLabel('New username',{exact:true}).fill('test-approver');await page.getByLabel('New display name',{exact:true}).fill('Test Approver');await page.getByLabel('New account role',{exact:true}).selectOption('approver');await page.getByLabel('Initial password',{exact:true}).fill('Synthetic initial password');await page.getByLabel('Confirm initial password',{exact:true}).fill('Synthetic initial password');await page.getByRole('button',{name:'Create Account',exact:true}).click();await expect(page.getByRole('alert')).toContainText('outage');await expect(page.getByLabel('New username',{exact:true})).toHaveValue('test-approver');await page.getByRole('button',{name:'Create Account',exact:true}).click();await expect(page.getByRole('cell',{name:'test-approver',exact:true})).toBeVisible();expect(rows[0].role).toBe('approver');expect(ids[0]).toBe(ids[1]);await expect(page.getByLabel('Initial password',{exact:true})).toHaveValue('');
  await page.getByRole('button',{name:'Edit test-approver',exact:true}).click();await page.getByLabel('Account role',{exact:true}).selectOption('officer');await page.getByLabel('New initial password',{exact:true}).fill('Replacement initial password');await page.getByRole('button',{name:'Reset Initial Password',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'must replace it'})).toBeVisible();expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);await page.screenshot({path:'test-results/accounts-phone.png',fullPage:true});
 });
+
+for(const width of [1440,320])test(`account list remains readable and accessible at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longName=`Synthetic Display ${'LongName'.repeat(12)}`,longUsername=`user_${'longidentifier'.repeat(7)}`;
+ const users=[
+  {id:'u1',username:longUsername,display_name:longName,role:'administrator',active:true,must_change:false,updated_at:'2026-11-19T00:00:00Z'},
+  {id:'u2',username:'disabled-user',display_name:'Historical Synthetic User',role:'officer',active:false,must_change:true,updated_at:'2026-11-18T00:00:00Z'}
+ ];
+ let writes=0,reads=0;
+ await page.route('**/api/auth/users**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}reads++;return route.fulfill({json:{users}});});
+ await page.goto('/#/accounts');
+ const list=page.locator('.accounts-list'),table=page.getByRole('region',{name:'User accounts table'}),rows=table.locator('tbody tr');
+ const heading=list.getByRole('heading',{name:'Existing accounts'}),refresh=list.getByRole('button',{name:'Refresh Accounts'});
+ await expect(heading).toBeVisible();await expect(refresh).toBeEnabled();await expect(rows).toHaveCount(2);
+ expect(await list.evaluate(el=>{const heading=el.querySelector('h2')!.getBoundingClientRect(),button=el.querySelector(':scope > button')!.getBoundingClientRect(),table=el.querySelector('.table-scroll')!.getBoundingClientRect();return heading.bottom<=button.top&&button.bottom<table.top;})).toBe(true);
+ await expect(rows.nth(0).locator('td').nth(0)).toHaveText(longName);await expect(rows.nth(0).locator('td').nth(1)).toHaveText(longUsername);
+ await expect(rows.nth(1).locator('td').nth(0)).toHaveText('Historical Synthetic User');await expect(rows.nth(1).locator('td').nth(1)).toHaveText('disabled-user');
+ await expect(rows.nth(0).locator('td').nth(2)).toHaveText('Administrator');await expect(rows.nth(1).locator('td').nth(2)).toHaveText('Procurement Officer');
+ await expect(rows.locator('.account-status')).toHaveText(['Active','Disabled']);
+ await expect(rows.nth(1).locator('td').nth(3)).toContainText('Initial');
+ const badgeColors=await rows.locator('.account-status').evaluateAll(badges=>badges.map(b=>getComputedStyle(b).backgroundColor));expect(badgeColors[0]).not.toBe(badgeColors[1]);
+ const previousReads=reads;await refresh.click();await expect.poll(()=>reads).toBeGreaterThan(previousReads);await expect(rows).toHaveCount(2);
+ expect(await rows.locator('td').evaluateAll(cells=>cells.every(cell=>cell.scrollWidth<=cell.clientWidth&&getComputedStyle(cell).borderBottomStyle==='solid'))).toBe(true);
+ await table.screenshot({path:`test-results/accounts-list-left-${width}.png`});
+ await refresh.focus();await page.keyboard.press('Tab');await expect(table).toBeFocused();expect(await table.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ if(await table.evaluate(el=>el.scrollWidth>el.clientWidth)){
+  await page.keyboard.press('ArrowRight');await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+  await table.evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+  await expect.poll(()=>table.evaluate(el=>el.scrollWidth-el.clientWidth-el.scrollLeft)).toBeLessThanOrEqual(1);
+ }
+ await table.screenshot({path:`test-results/accounts-list-right-${width}.png`});
+ await table.focus();await page.keyboard.press('Tab');
+ const edit=rows.nth(0).getByRole('button',{name:`Edit ${longUsername}`,exact:true});await expect(edit).toBeFocused();
+ expect(await edit.evaluate(el=>{const region=el.closest('.table-scroll')!.getBoundingClientRect(),button=el.getBoundingClientRect();return button.left>=region.left-1&&button.right<=region.right+1&&el.scrollWidth<=el.clientWidth&&getComputedStyle(el).outlineStyle!=='none';})).toBe(true);
+ await page.keyboard.press('Tab');await expect(rows.nth(1).getByRole('button',{name:'Edit disabled-user',exact:true})).toBeFocused();
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await rows.nth(1).getByRole('button',{name:'Edit disabled-user',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Edit disabled-user',exact:true})).toBeVisible();
+ expect(reads).toBeGreaterThan(0);expect(writes).toBe(0);
+});
