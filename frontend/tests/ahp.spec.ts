@@ -22,3 +22,49 @@ test('AHP incomplete, inconsistent, save retry, approval and reopening',async({p
  await page.screenshot({path:'test-results/ahp.png',fullPage:true});
  await page.getByRole('button',{name:'Continue to Eligibility Review',exact:false}).click();await expect(page).toHaveURL(/eligibility/);
 });
+
+for(const width of [1440,320])test(`AHP control groups and history remain usable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const criteria=[{id:'a',name:'Price'},{id:'b',name:'Quality'}];
+ const result={weights:{a:'50',b:'50'},cr:'0.0999999',ci:'0.05',ri:'0.5',lambda_max:'2.1',acceptable:true,matrix:[['1','1'],['1','1']],method:'AHP'};
+ const judgments={'a:b':'1'};
+ const saved={criteria,criteria_revision:1,judgments,revision:1,weight_revision:1,approved:true,active_method:'ahp',needs_review:false,result};
+ let writes=0;
+ await page.route('**/api/projects**',route=>{
+  if(route.request().method()!=='GET')writes++;
+  const url=route.request().url();
+  if(url.endsWith('/history'))return route.fulfill({json:{versions:[{revision:1,created_at:'2026-11-18',snapshot:{criteria,judgments,approved:true,result}}]}});
+  return route.fulfill({json:url.endsWith('/weights/ahp')?saved:{id:'p1',name:'Test AHP',reference:'P1',currency:'USD'}});
+ });
+ await page.goto('/#/projects/p1/weights/ahp');
+ const methods=page.getByRole('region',{name:'Other weighting methods'});
+ const tools=page.getByRole('region',{name:'Comparison tools'});
+ await expect(methods.getByRole('button')).toHaveCount(2);
+ await expect(tools.getByRole('button',{name:'Reload saved comparisons'})).toBeVisible();
+ await expect(page.getByText('1 of 1 comparisons answered')).toBeVisible();
+ await expect(page.getByText('Consistency ratio (CR): 0.100000', {exact:false})).toContainText('Within the 0.10 limit.');
+ const draft=page.getByRole('button',{name:'Save Draft',exact:true});
+ const approve=page.getByRole('button',{name:'Approve AHP Weights'});
+ const next=page.getByRole('button',{name:'Continue to Eligibility Review',exact:false});
+ await expect(next).toBeEnabled();
+ await draft.focus();await page.keyboard.press('Tab');await expect(approve).toBeFocused();
+ expect(await approve.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ const layout=await page.locator('.ahp-weighting').evaluate(el=>{
+  const rect=(selector:string)=>el.querySelector(selector)!.getBoundingClientRect();
+  const methods=rect('.weighting-methods'),tools=rect('.ahp-comparison-tools'),table=rect('.table-scroll'),calculate=rect('.ahp-calculate'),save=rect('.weighting-save-actions'),next=rect('.weighting-continue'),history=rect('.ahp-history');
+  const buttons=Array.from(el.querySelectorAll('.weighting-methods button,.ahp-comparison-tools button,.ahp-calculate button,.weighting-save-actions button,.weighting-continue button'),button=>button.getBoundingClientRect());
+  return methods.bottom<tools.top&&tools.bottom<table.top&&table.bottom<calculate.top&&save.bottom<next.top&&next.bottom<history.top&&buttons.every((a,i)=>buttons.slice(i+1).every(b=>a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top));
+ });
+ expect(layout).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await page.getByText('Saved comparison history (latest 20 versions)').click();
+ await expect(page.getByText('Price compared with Quality: 1')).toBeVisible();
+ await expect(page.getByText('CR: 0.100000',{exact:true})).toBeVisible();
+ await page.getByLabel('Price compared with Quality').selectOption('2');
+ await expect(next).toBeDisabled();await expect(approve).toBeDisabled();
+ page.once('dialog',dialog=>dialog.dismiss());await tools.getByRole('button',{name:'Reload saved comparisons'}).click();
+ await expect(page.getByLabel('Price compared with Quality')).toHaveValue('2');
+ page.once('dialog',dialog=>dialog.accept());await tools.getByRole('button',{name:'Reload saved comparisons'}).click();
+ await expect(page.getByLabel('Price compared with Quality')).toHaveValue('1');
+ await expect(next).toBeEnabled();expect(writes).toBe(0);
+});
