@@ -1,4 +1,4 @@
-import {createContext,useContext,useEffect,useRef,useState,type ReactNode} from 'react';
+import {createContext,useContext,useEffect,useLayoutEffect,useRef,useState,type ReactNode} from 'react';
 import {api,ApiError,setCsrfToken} from './api';
 export type User={id:string;username:string;display_name:string;role:'administrator'|'officer'|'approver';active:boolean;must_change:boolean;updated_at:string};
 type Session={user:User|null;csrf_token:string|null;setup_required:boolean};
@@ -9,6 +9,7 @@ export const roleName=(role:User['role'])=>({administrator:'Administrator',offic
 
 function PasswordForm({onSuccess,onCancel,required}:{onSuccess:(s:Session)=>void;onCancel:()=>void;required:boolean}){
  const [current,setCurrent]=useState(''),[next,setNext]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ useLayoutEffect(()=>{window.scrollTo({top:0,behavior:'instant'});},[]);
  async function save(e:React.SubmitEvent<HTMLFormElement>){e.preventDefault();if(next!==confirm){setError('The new passwords do not match.');return;}setBusy(true);setError('');try{const data=await api<Session>('/api/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({current_password:current,new_password:next})});setCurrent('');setNext('');setConfirm('');onSuccess(data);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
  return <main className="auth-page"><form className="project-form" onSubmit={save}><h1>Change password</h1><p>{required?'Replace your initial password before continuing.':'Changing your password ends your other signed-in sessions.'}</p>{error&&<p role="alert" className="error">{error}</p>}<fieldset disabled={busy}><label>Current password<input type="password" autoComplete="current-password" required maxLength={128} value={current} onChange={e=>setCurrent(e.target.value)}/></label><label>New password<input type="password" autoComplete="new-password" required minLength={15} maxLength={128} value={next} onChange={e=>setNext(e.target.value)}/></label><p>Use 15–128 characters. Spaces are allowed.</p><label>Confirm new password<input type="password" autoComplete="new-password" required minLength={15} maxLength={128} value={confirm} onChange={e=>setConfirm(e.target.value)}/></label><div className="actions"><button className="primary">{busy?'Saving…':'Change Password'}</button><button type="button" className="secondary" onClick={onCancel}>{required?'Sign out':'Cancel'}</button></div></fieldset></form></main>;
 }

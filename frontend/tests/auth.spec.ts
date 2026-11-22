@@ -19,6 +19,80 @@ test('first account setup offers local administrator tool without public registr
  await page.route('**/api/auth/session',r=>r.fulfill({json:{user:null,csrf_token:null,setup_required:true}}));await page.goto('/#/');await expect(page.getByRole('heading',{name:'Create the first administrator'})).toBeVisible();await expect(page.getByLabel('Password',{exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Check Account Setup',exact:true})).toBeVisible();await page.screenshot({path:'test-results/auth-setup.png',fullPage:true});
 });
 
+for(const viewport of [{width:1440,height:850},{width:320,height:850},{width:320,height:320}])test(`change password opens at the top from a scrolled workspace at ${viewport.width}x${viewport.height}`,async({page},testInfo)=>{
+ await page.setViewportSize(viewport);
+ let writes=0;
+ await page.route('**/api/**',route=>{if(route.request().method()!=='GET')writes++;return route.abort();});
+ await page.route('**/api/auth/session',route=>route.fulfill({json:{user,csrf_token:'a'.repeat(64),setup_required:false}}));
+ await page.route('**/api/projects',route=>route.fulfill({json:[]}));
+ const template={name:'Synthetic template',notes:'Fixture',currency:'USD',configuration:{criteria:[],mandatory_checks:[],maximum_price:null},weights:null,source_project_id:'p1',source_revision:1,version:1,active:true,actor:'Fixture',created_at:user.updated_at,updated_at:user.updated_at};
+ await page.route('**/api/workspace/templates**',route=>route.fulfill({json:{projects:[],templates:Array.from({length:8},(_,i)=>({...template,id:`t${i}`}))}}));
+ await page.goto('/#/criteria');
+ await expect(page.getByRole('heading',{name:'Synthetic template',exact:true})).toHaveCount(8);
+ await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+ expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(0);
+ const opener=page.getByRole('button',{name:'Change Password',exact:true});
+ await opener.evaluate(el=>el.addEventListener('click',()=>{document.documentElement.dataset.entryScroll=String(window.scrollY);},{once:true}));
+ await opener.click();
+ if(viewport.height===320)expect(Number(await page.locator('html').getAttribute('data-entry-scroll'))).toBeGreaterThan(0);
+ const heading=page.getByRole('heading',{name:'Change password',exact:true}),current=page.getByLabel('Current password',{exact:true}),next=page.getByLabel('New password',{exact:true}),confirm=page.getByLabel('Confirm new password',{exact:true}),submit=page.getByRole('button',{name:'Change Password',exact:true}),cancel=page.getByRole('button',{name:'Cancel',exact:true});
+ await expect(heading).toBeVisible();await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(0);
+ for(const locator of [heading,current.locator('..')])expect(await locator.evaluate(el=>{const r=el.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;})).toBe(true);
+ expect(await page.evaluate(()=>document.activeElement?.tagName)).toBe('BODY');
+ await page.screenshot({path:testInfo.outputPath('initial.png')});
+ for(const [field,value] of [[current,'Synthetic current'],[next,'Synthetic new password'],[confirm,'Synthetic mismatch']] as const){
+  await page.keyboard.press('Tab');await expect(field).toBeFocused();await field.fill(value);
+ }
+ await page.keyboard.press('Tab');await expect(submit).toBeFocused();await page.keyboard.press('Tab');await expect(cancel).toBeFocused();
+ if(viewport.height===320){
+  await confirm.focus();await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+  const before=await page.evaluate(()=>window.scrollY);expect(before).toBeGreaterThan(0);
+  await page.keyboard.type('x');expect(await page.evaluate(()=>window.scrollY)).toBe(before);
+  await submit.focus();await page.keyboard.press('Enter');await expect(page.getByRole('alert')).toHaveText('The new passwords do not match.');
+  expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(0);
+ }
+ await cancel.focus();await page.keyboard.press('Enter');await expect(opener).toBeVisible();expect(writes).toBe(0);
+});
+
+test('required password change retains its guidance and sign-out action',async({page})=>{
+ let logout=0;
+ await page.route('**/api/**',route=>route.abort());
+ await page.route('**/api/auth/session',route=>route.fulfill({json:{user:{...user,must_change:true},csrf_token:'a'.repeat(64),setup_required:false}}));
+ await page.route('**/api/auth/logout',route=>{logout++;return route.fulfill({status:204});});
+ await page.goto('/#/');
+ await expect(page.getByText('Replace your initial password before continuing.')).toBeVisible();
+ await expect(page.getByRole('button',{name:'Cancel',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'Sign out',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Sign in to SSDSS'})).toBeVisible();expect(logout).toBe(1);
+});
+
+test('password form busy and error updates do not reset scrolling',async({page})=>{
+ await page.setViewportSize({width:320,height:320});
+ let release!:()=>void,attempts=0;const gate=new Promise<void>(resolve=>{release=resolve;});
+ await page.route('**/api/**',route=>route.abort());
+ await page.route('**/api/auth/session',route=>route.fulfill({json:{user,csrf_token:'a'.repeat(64),setup_required:false}}));
+ await page.route('**/api/projects',route=>route.fulfill({json:[]}));
+ await page.route('**/api/auth/change-password',async route=>{
+  attempts++;await gate;return route.fulfill({status:503,json:{detail:'Synthetic password service unavailable'}});
+ });
+ try{
+  await page.goto('/#/');await page.getByRole('button',{name:'Change Password',exact:true}).click();
+  await page.getByLabel('Current password',{exact:true}).fill('Synthetic current');
+  await page.getByLabel('New password',{exact:true}).fill('Synthetic new password');
+  await page.getByLabel('Confirm new password',{exact:true}).fill('Synthetic new password');
+  const submit=page.getByRole('button',{name:'Change Password',exact:true});
+  await submit.focus();await page.evaluate(()=>window.scrollTo({top:document.documentElement.scrollHeight,behavior:'instant'}));
+  expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(0);
+  await page.keyboard.press('Enter');await expect.poll(()=>attempts).toBe(1);await expect(page.getByRole('button',{name:'Saving…'})).toBeDisabled();
+  expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(0);
+  release();await expect(page.getByRole('alert')).toHaveText('Synthetic password service unavailable');
+  expect(await page.evaluate(()=>window.scrollY)).toBeGreaterThan(0);
+  await expect(page.getByLabel('Current password',{exact:true})).toHaveValue('Synthetic current');
+  await expect(page.getByLabel('New password',{exact:true})).toHaveValue('Synthetic new password');
+  await expect(submit).toBeEnabled();
+ }finally{release();}
+});
+
 test('Approver reads review notes and downloads evidence without editing at phone width',async({page})=>{
  await page.setViewportSize({width:375,height:850});
  await page.route('**/api/auth/session',r=>r.fulfill({json:{user:{...user,role:'approver'},csrf_token:'d'.repeat(64),setup_required:false}}));
