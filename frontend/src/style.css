@@ -753,6 +753,28 @@ dialog::backdrop { background:#0006; }
   .evaluations-page .table-scroll .actions button {max-width:calc(100vw - 200px)}
 }
 
+.reports-page .reports-scroll-hint {margin:0 0 8px;font-size:12px}
+.reports-page .table-scroll {--project-column-width:220px;scroll-padding-inline:calc(var(--project-column-width) + 8px) 8px}
+.workspace-section .reports-page .table-scroll table {table-layout:fixed;min-width:calc(var(--project-column-width) + 720px)}
+.reports-page .table-scroll th:first-child, .reports-page .table-scroll td:first-child {position:sticky;left:0;width:var(--project-column-width)}
+.reports-page .table-scroll th:first-child {z-index:3;background:#eff4ff;white-space:normal}
+.reports-page .table-scroll td:first-child {z-index:2;background:white}
+.reports-page .table-scroll th:nth-child(2) {width:280px}
+.reports-page .table-scroll th:nth-child(3) {width:200px}
+.reports-page .table-scroll th:last-child {width:240px}
+.reports-page .table-scroll td {white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+.reports-page .table-scroll td .supplier-note {display:block;margin:6px 0 0;padding:0;background:none;line-height:1.4}
+.reports-page .reports-outcome {display:flex;flex-wrap:wrap;column-gap:4px}
+.reports-page .reports-outcome span {min-width:0}
+.reports-page .table-scroll td p {margin:8px 0}
+.reports-page .table-scroll .actions {flex-direction:column;align-items:flex-start;flex-wrap:nowrap;gap:8px}
+.reports-page .table-scroll .actions button {max-width:100%;white-space:normal;overflow-wrap:anywhere;scroll-margin-inline:4px}
+@media(max-width:700px) {
+  .reports-page .table-scroll {--project-column-width:140px}
+  .reports-page .table-scroll .actions {align-items:flex-end}
+  .reports-page .table-scroll .actions button {max-width:calc(100vw - 200px)}
+}
+
 .rankings-page .rankings-summary {margin:16px 0 20px}
 .rankings-page .rankings-summary p {overflow-wrap:anywhere}
 .rankings-page .rankings-summary .success, .rankings-page .rankings-summary .error {margin:0 0 12px}

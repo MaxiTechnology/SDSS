@@ -98,3 +98,70 @@ for(const width of [1440,768,320])test(`evaluations table and filters remain usa
  await page.getByLabel('Filter evaluations by calculation').selectOption('');await row.getByRole('button',{name:'View Rankings',exact:true}).click();await expect(page).toHaveURL(/projects\/p0\/rankings$/);
  expect(writes).toBe(0);
 });
+
+for(const width of [1440,320])test(`reports table and filters remain usable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longName=`Synthetic project ${'LongName'.repeat(12)}`,actor=`Historical approver ${'LongIdentity'.repeat(10)}`,supplierName=`Supplier ${'LongName'.repeat(10)}`;
+ const reports=Array.from({length:22},(_,i)=>({...report,id:`d${i}`,project_id:`p${i}`,project_name:i===0?longName:`Synthetic project ${i}`,reference:`PRJ-${i}`,actor:i===0?actor:'Another approver',selected_supplier:i===0?supplierName:i===1?null:'Supplier',action:i===1?'defer':i===2?'alternative':'approve',latest_saved:true}));
+ reports.splice(1,0,{...reports[0],id:'old',version:1,latest_saved:false});
+ const reportProjects=reports.filter(r=>r.latest_saved).map(r=>({...projects[0],id:r.project_id,name:r.project_name,reference:r.reference}));
+ let writes=0;
+ await page.route('**/api/workspace/**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{projects:reportProjects,reports}});});
+ await page.route('**/api/projects**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{id:'p0',name:longName,reference:'PRJ-0',currency:'USD'}});});
+ let releasePdf!:()=>void;const pdfGate=new Promise<void>(resolve=>{releasePdf=resolve;});
+ await page.route('**/report.pdf',async route=>{await pdfGate;return route.fulfill({status:503,json:{detail:'Synthetic PDF unavailable'}});});
+ await page.route('**/api/auth/users',route=>route.fulfill({json:{users:[]}}));
+ await page.goto('/#/reports');
+ await expect(page.getByText('Scroll horizontally to see more report details and actions.')).toBeVisible();
+ const table=page.getByRole('region',{name:'Workspace reports table'}),row=table.getByRole('row').filter({hasText:longName}),project=row.locator('td').first();
+ await expect(table.getByRole('row').nth(1)).toContainText(longName);
+ await expect(table.getByRole('row').nth(2)).toContainText('Synthetic project 1');
+ await expect(project.locator('strong')).toHaveText(longName);await expect(project.locator('small')).toHaveText('PRJ-0');
+ await expect(row.locator('td').nth(1)).toContainText('Version 2');
+ await expect(row.locator('td').nth(1)).toContainText('Recommended supplier approved');
+ await expect(row.locator('td').nth(1).locator('p')).toHaveText(supplierName);
+ await expect(row.locator('td').nth(1).locator('small')).toHaveText(await page.evaluate(value=>new Date(value).toLocaleString(),stamp));
+ await expect(row.locator('td').nth(2)).toHaveText(actor);
+ await expect(table.getByText('No supplier awarded',{exact:true}).first()).toBeAttached();
+ await expect(table.getByText('Alternative approved',{exact:false}).first()).toBeAttached();
+ expect(await project.evaluate(el=>{const name=el.querySelector('strong')!.getBoundingClientRect(),reference=el.querySelector('small')!.getBoundingClientRect();return name.bottom<=reference.top&&el.scrollWidth<=el.clientWidth;})).toBe(true);
+ expect(await row.locator('td').evaluateAll(cells=>cells.every(cell=>cell.scrollWidth<=cell.clientWidth))).toBe(true);
+ const before=await project.boundingBox();expect(before).not.toBeNull();
+ expect(await project.evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(255, 255, 255)',z:2});
+ expect(await table.getByRole('columnheader',{name:'Project',exact:true}).evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(239, 244, 255)',z:3});
+ await table.screenshot({path:`test-results/reports-left-${width}.png`});
+ await table.focus();expect(await table.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ if(await table.evaluate(el=>el.scrollWidth>el.clientWidth)){
+  await page.keyboard.press('ArrowRight');await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);
+  await table.evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+  await expect.poll(()=>table.evaluate(el=>el.scrollWidth-el.clientWidth-el.scrollLeft)).toBeLessThanOrEqual(1);
+ }
+ const after=await project.boundingBox();expect(after).not.toBeNull();expect(Math.abs(after!.x-before!.x)).toBeLessThanOrEqual(1);
+ await table.screenshot({path:`test-results/reports-right-${width}.png`});
+ await table.focus();await page.keyboard.press('Tab');
+ for(const name of ['Open Saved Report','Download PDF','Review Project']){
+  const button=row.getByRole('button',{name,exact:true});await expect(button).toBeFocused();
+  const geometry=await button.evaluate(el=>{const table=el.closest('.table-scroll')!.getBoundingClientRect(),project=el.closest('tr')!.querySelector('td')!.getBoundingClientRect(),button=el.getBoundingClientRect();return {visible:button.left>=project.right-1&&button.right<=table.right+1,focus:getComputedStyle(el).outlineStyle,content:el.scrollWidth<=el.clientWidth,table:[table.left,table.right],project:[project.left,project.right],button:[button.left,button.right]};});
+  expect(geometry.visible,`${name}: ${JSON.stringify(geometry)}`).toBe(true);expect(geometry.focus).not.toBe('none');expect(geometry.content).toBe(true);
+  if(name!=='Review Project')await page.keyboard.press('Tab');
+ }
+ expect(await row.locator('.actions').evaluate(el=>{const buttons=Array.from(el.querySelectorAll('button'),b=>b.getBoundingClientRect());return buttons.every((a,i)=>buttons.slice(i+1).every(b=>a.bottom<=b.top));})).toBe(true);
+ await row.getByRole('button',{name:'Download PDF'}).click();
+ const busy=row.getByRole('button',{name:'Preparing PDF…'});await expect(busy).toBeDisabled();
+ await expect(table.getByRole('button',{name:'Download PDF'}).first()).toBeDisabled();
+ expect(await busy.evaluate(el=>{const table=el.closest('.table-scroll')!.getBoundingClientRect(),project=el.closest('tr')!.querySelector('td')!.getBoundingClientRect(),button=el.getBoundingClientRect();return button.left>=project.right-1&&button.right<=table.right+1&&el.scrollWidth<=el.clientWidth;})).toBe(true);
+ releasePdf();await expect(page.getByRole('alert')).toContainText('Synthetic PDF unavailable');await expect(row.getByRole('button',{name:'Download PDF'})).toBeEnabled();
+ const filters=page.locator('.reports-page .toolbar');
+ expect(await filters.locator('input,select').evaluateAll(items=>items.every(item=>{const r=item.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}))).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await expect(page.getByText('22 results',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(table.getByText('Synthetic project 21',{exact:true})).toBeAttached();
+ await page.getByLabel('Latest saved version per project').uncheck();await expect(page.getByText('23 results',{exact:true})).toBeVisible();
+ await expect(table.getByText('Version 1',{exact:true})).toBeAttached();
+ await page.getByLabel('Search reports').fill('Historical approver');await expect(table.getByRole('row')).toHaveCount(3);
+ await page.getByLabel('Latest saved version per project').check();await expect(table.getByRole('row')).toHaveCount(2);
+ await page.getByLabel('Search reports').fill('');await page.getByLabel('Filter reports by project').selectOption('p1');await expect(table.getByText('No supplier awarded',{exact:true})).toBeAttached();
+ await page.getByLabel('Filter reports by project').selectOption('');await page.getByLabel('Filter reports by decision').selectOption('defer');await expect(table.getByRole('row')).toHaveCount(2);
+ await page.getByLabel('Filter reports by decision').selectOption('');await row.getByRole('button',{name:'Review Project'}).click();await expect(page).toHaveURL(/projects\/p0\/decision$/);
+ expect(writes).toBe(0);
+});
