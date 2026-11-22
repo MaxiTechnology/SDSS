@@ -1111,3 +1111,4 @@ aside { overflow-y: auto; }
 .template-create .template-weights-help {margin:8px 0 0 28px}
 .template-create .template-create-actions {margin-top:24px;padding-top:20px;border-top:1px solid #e5e9f4}
 .template-create .template-create-actions button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.template-details .template-details-scroll-hint {margin:0 0 8px;font-size:12px}

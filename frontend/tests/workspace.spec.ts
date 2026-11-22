@@ -33,6 +33,49 @@ test('criteria templates preserve capture retries, preview confirmation and appl
  await page.getByRole('button',{name:'Preview and Apply',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Target project',{exact:true}).selectOption('p2');await dialog.getByRole('button',{name:'Load Application Preview',exact:true}).click();await expect(dialog.getByRole('button',{name:'Apply as Draft',exact:true})).toBeDisabled();await expect(dialog).toContainText('Saved decision reports remain unchanged.');await dialog.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights.").check();await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('Apply response uncertain');await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog).not.toBeVisible();expect(appliedIds[0]).toBe(appliedIds[1]);await expect(page.getByRole('button',{name:'Open draft weights',exact:true})).toBeVisible();
 });
 
+for(const width of [1440,320])test(`template configuration scrolling in list and preview at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ let longUnit=false,writes=0;
+ await page.route('**/api/**',route=>{if(route.request().url().endsWith('/api/auth/session'))return route.fallback();if(route.request().method()!=='GET')writes++;return route.abort();});
+ await page.route('**/api/workspace/templates**',route=>{
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  const current={...template,configuration:{...configuration,criteria:configuration.criteria.map(c=>c.id==='price'?{...c,unit:longUnit?'W'.repeat(200):c.unit}:c)}};
+  return route.fulfill({json:new URL(route.request().url()).pathname.endsWith('/preview')?{project_id:'p2',project_name:'Target project',project_updated_at:stamp,criteria_revision:0,weight_revision:0,template:current}:{projects,templates:[current]}});
+ });
+ await page.route('**/api/projects',route=>route.fulfill({json:[]}));
+ await page.goto('/#/criteria');
+ const card=page.locator('.template-card').first();await card.locator('summary').click();
+ const list=card.getByRole('region',{name:'Criteria in Reusable criteria'}),listHint=card.getByText('Scroll horizontally to see all criteria.');
+ const listOverflow=await list.evaluate(el=>el.scrollWidth>el.clientWidth);
+ expect(listOverflow).toBe(width===320);await expect(listHint).toHaveCount(listOverflow?1:0);
+ if(listOverflow){const id=await list.getAttribute('aria-describedby');expect(id).toBeTruthy();await expect(listHint).toHaveAttribute('id',id!);}
+ await page.setViewportSize({width:width===320?1440:320,height:850});await expect(listHint).toHaveCount(width===320?0:1);
+ await page.setViewportSize({width:1440,height:850});await expect(listHint).toHaveCount(0);
+ longUnit=true;await page.getByRole('button',{name:'Refresh this page'}).click();await expect(listHint).toHaveCount(1);
+ longUnit=false;await page.getByRole('button',{name:'Refresh this page'}).click();await expect(listHint).toHaveCount(0);
+ await page.setViewportSize({width,height:850});await expect(listHint).toHaveCount(listOverflow?1:0);
+ async function checkKeyboard(table:typeof list){
+  await page.keyboard.press('Tab');await table.focus();expect(await table.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+  for(let i=0;i<24;i++){await page.keyboard.press('ArrowRight');await page.waitForTimeout(70);}
+  await expect.poll(()=>table.evaluate(el=>el.scrollWidth-el.clientWidth-el.scrollLeft)).toBeLessThanOrEqual(1);
+  expect(await table.getByRole('columnheader',{name:'Weight'}).evaluate(el=>{const box=el.getBoundingClientRect(),region=el.closest('.table-scroll')!.getBoundingClientRect();return box.left>=region.left-1&&box.right<=region.right+1;})).toBe(true);
+ }
+ if(listOverflow)await checkKeyboard(list);
+ await list.evaluate(el=>{el.scrollTo({left:0,behavior:'instant'});});
+ await card.screenshot({path:`test-results/template-details-${width}.png`});
+ await card.getByRole('button',{name:'Preview and Apply'}).click();
+ const dialog=page.getByRole('dialog',{name:'Preview template application'});await dialog.getByLabel('Target project').selectOption('p2');await dialog.getByRole('button',{name:'Load Application Preview'}).click();
+ const preview=dialog.getByRole('region',{name:'Criteria in Reusable criteria'}),previewHint=dialog.getByText('Scroll horizontally to see all criteria.');
+ await expect(previewHint).toHaveCount(1);expect(await preview.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);
+ const described=await preview.getAttribute('aria-describedby');expect(described).toBeTruthy();await expect(previewHint).toHaveAttribute('id',described!);expect(described).not.toBe(await list.getAttribute('aria-describedby'));
+ await expect(dialog.getByRole('button',{name:'Apply as Draft'})).toBeDisabled();await expect(dialog).toContainText('Saved decision reports remain unchanged.');
+ await checkKeyboard(preview);await preview.evaluate(el=>{el.scrollTo({left:0,behavior:'instant'});});
+ await dialog.screenshot({path:`test-results/template-preview-${width}.png`});
+ await dialog.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights.").scrollIntoViewIfNeeded();
+ await dialog.screenshot({path:`test-results/template-preview-lower-${width}.png`});
+ expect(writes).toBe(0);
+});
+
 for(const width of [1440,320])test(`reusable template form layout and keyboard order at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:850});
  const longName=`Synthetic project ${'LongName'.repeat(12)}`,sourceProjects=[{...projects[0],name:longName},{...projects[0],id:'draft',name:'Draft weights',weights_approved:false},{...projects[1],id:'unavailable'}];
