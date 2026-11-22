@@ -165,3 +165,58 @@ for(const width of [1440,320])test(`reports table and filters remain usable at $
  await page.getByLabel('Filter reports by decision').selectOption('');await row.getByRole('button',{name:'Review Project'}).click();await expect(page).toHaveURL(/projects\/p0\/decision$/);
  expect(writes).toBe(0);
 });
+
+for(const width of [1440,1024,320])test(`global suppliers table, disclosure and filters at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const longSupplier=`Supplier ${'LongName'.repeat(12)}`,longProject=`Project ${'LongName'.repeat(12)}`,longLocation=`Location ${'LongLocation'.repeat(8)}`,description=`Details ${'LongDescription'.repeat(12)}`;
+ const suppliers=Array.from({length:22},(_,i)=>({...supplier,id:`s${i}`,name:i===0?longSupplier:`Supplier ${i}`,location:i===0?longLocation:'',description:i===0?description:'',project_id:i===1?'p2':'p1',project_name:i===0?longProject:i===1?'Target project':'Source project',reference:i===1?'PRJ-TWO':'PRJ-ONE'}));
+ let writes=0;
+ await page.route('**/api/workspace/suppliers',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{projects,suppliers}});});
+ await page.route('**/api/projects**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:[]});});
+ await page.goto('/#/suppliers');
+ const table=page.getByRole('region',{name:'Workspace suppliers table'}),hint=page.getByText('Scroll horizontally to see more supplier details and actions.'),toolbar=page.locator('.suppliers-page > .toolbar');
+ const search=page.getByLabel('Search suppliers',{exact:true}),projectFilter=page.getByLabel('Filter suppliers by project',{exact:true}),add=page.getByRole('button',{name:'Add Supplier',exact:true});
+ await expect(table.getByRole('row')).toHaveCount(21);await expect(page.getByText('22 results',{exact:true})).toBeVisible();
+ const row=table.getByRole('row').nth(1),supplierCell=row.locator('td').first(),projectCell=row.locator('td').nth(2);
+ await expect(supplierCell.locator('strong')).toHaveText(longSupplier);await expect(row.locator('td').nth(1)).toHaveText(longLocation);await expect(projectCell).toContainText(longProject);await expect(projectCell.locator('small')).toHaveText('PRJ-ONE');
+ await expect(table.getByRole('row').nth(2)).toContainText('Supplier 1');await expect(table.getByRole('row').nth(2)).toContainText('Not recorded');
+ expect(await projectCell.evaluate(el=>{const reference=el.querySelector('small')!.getBoundingClientRect(),range=document.createRange();range.selectNodeContents(el.firstChild!);return range.getBoundingClientRect().bottom<=reference.top;})).toBe(true);
+ expect(await toolbar.locator('input,select,button').evaluateAll(items=>items.every(item=>{const r=item.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;}))).toBe(true);
+ const controlBoxes=await Promise.all([search,projectFilter,add].map(el=>el.boundingBox()));
+ if(width!==320)expect(Math.max(...controlBoxes.map(b=>b!.y+b!.height))-Math.min(...controlBoxes.map(b=>b!.y+b!.height))).toBeLessThanOrEqual(1);
+ else expect(controlBoxes[1]!.y).toBeGreaterThan(controlBoxes[0]!.y+controlBoxes[0]!.height);
+ await toolbar.screenshot({path:`test-results/global-suppliers-toolbar-${width}.png`});
+ const overflows=await table.evaluate(el=>el.scrollWidth>el.clientWidth);
+ expect(overflows).toBe(width!==1440);await expect(hint).toHaveCount(overflows?1:0);
+ await page.setViewportSize({width:width===320?1440:320,height:850});await expect(hint).toHaveCount(width===320?0:1);
+ await page.setViewportSize({width,height:850});await expect(hint).toHaveCount(overflows?1:0);
+ await table.evaluate(el=>{el.scrollLeft=0;});
+ await add.focus();await page.keyboard.press('Tab');await expect(table).toBeFocused();expect(await table.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ if(overflows){await page.keyboard.press('ArrowRight');await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);}
+ await page.keyboard.press('Tab');const summary=supplierCell.locator('summary');await expect(summary).toBeFocused();expect(await summary.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ await page.keyboard.press('Enter');await expect(supplierCell.getByText(description,{exact:true})).toBeVisible();
+ const timestamp=await page.evaluate(value=>new Date(value).toLocaleString(),stamp);await expect(supplierCell).toContainText(`Updated ${timestamp}`);
+ expect(await supplierCell.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ await table.evaluate(el=>{el.scrollLeft=0;});await table.screenshot({path:`test-results/global-suppliers-left-${width}.png`});
+ const original=await supplierCell.boundingBox();
+ await page.keyboard.press('Tab');
+ for(const name of ['Manage in Project','Copy to Project']){
+  const button=row.getByRole('button',{name,exact:true});await expect(button).toBeFocused();
+  const geometry=await button.evaluate(el=>{const region=el.closest('.table-scroll')!.getBoundingClientRect(),sticky=el.closest('tr')!.querySelector('td')!.getBoundingClientRect(),box=el.getBoundingClientRect();return {visible:box.left>=sticky.right-1&&box.right<=region.right+1,content:el.scrollWidth<=el.clientWidth,focus:getComputedStyle(el).outlineStyle,region:[region.left,region.right],sticky:[sticky.left,sticky.right],button:[box.left,box.right]};});
+  expect(geometry.visible,`${name}: ${JSON.stringify(geometry)}`).toBe(true);expect(geometry.content).toBe(true);expect(geometry.focus).not.toBe('none');
+  if(name==='Manage in Project')await page.keyboard.press('Tab');
+ }
+ await table.evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+ const end=await supplierCell.boundingBox();expect(Math.abs(original!.x-end!.x)).toBeLessThanOrEqual(1);
+ expect(await supplierCell.evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(255, 255, 255)',z:2});
+ expect(await table.getByRole('columnheader',{name:'Supplier',exact:true}).evaluate(el=>({position:getComputedStyle(el).position,background:getComputedStyle(el).backgroundColor,z:Number(getComputedStyle(el).zIndex)}))).toEqual({position:'sticky',background:'rgb(239, 244, 255)',z:3});
+ await table.screenshot({path:`test-results/global-suppliers-right-${width}.png`});
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ const second=table.getByRole('row').nth(2);await second.locator('summary').click();await expect(second.getByText('No description recorded.',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Next',exact:true}).click();await expect(table.getByText('Supplier 21',{exact:true})).toBeAttached();
+ await search.fill('PRJ-TWO');await expect(table.getByRole('row')).toHaveCount(2);await expect(table.getByText('Supplier 1',{exact:true})).toBeAttached();
+ await search.fill('');await projectFilter.selectOption('p2');await expect(table.getByRole('row')).toHaveCount(2);await expect(table.getByText('Supplier 1',{exact:true})).toBeAttached();
+ await projectFilter.selectOption('');await row.getByRole('button',{name:'Copy to Project'}).click();await expect(page.getByRole('dialog',{name:'Copy supplier to a project'})).toBeVisible();await page.getByRole('button',{name:'Close dialog'}).click();
+ await row.getByRole('button',{name:'Manage in Project'}).click();await expect(page).toHaveURL(/projects\/p1\/suppliers$/);
+ expect(writes).toBe(0);
+});

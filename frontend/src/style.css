@@ -733,6 +733,30 @@ dialog::backdrop { background:#0006; }
   .matrix-page .matrix-table input {max-width:140px}
 }
 
+.suppliers-page > .toolbar {align-items:flex-end}
+.suppliers-page > .toolbar label {min-width:0}
+.suppliers-page .suppliers-scroll-hint {margin:0 0 8px;font-size:12px}
+.suppliers-page > .table-scroll {--supplier-column-width:220px;scroll-padding-inline:calc(var(--supplier-column-width) + 8px) 8px}
+.workspace-section .suppliers-page > .table-scroll table {table-layout:fixed;min-width:calc(var(--supplier-column-width) + 640px)}
+.suppliers-page > .table-scroll th:first-child, .suppliers-page > .table-scroll td:first-child {position:sticky;left:0;width:var(--supplier-column-width)}
+.suppliers-page > .table-scroll th:first-child {z-index:3;background:#eff4ff;white-space:normal}
+.suppliers-page > .table-scroll td:first-child {z-index:2;background:white}
+.suppliers-page > .table-scroll th:nth-child(2) {width:180px}
+.suppliers-page > .table-scroll th:nth-child(3) {width:220px}
+.suppliers-page > .table-scroll th:last-child {width:240px}
+.suppliers-page > .table-scroll td {white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+.suppliers-page > .table-scroll td .supplier-note {display:block;margin:6px 0 0;padding:0;background:none;line-height:1.4}
+.suppliers-page > .table-scroll details {margin-top:8px}
+.suppliers-page > .table-scroll details p {margin:8px 0 0}
+.suppliers-page > .table-scroll summary:focus-visible {outline:3px solid #779eff;outline-offset:2px}
+.suppliers-page > .table-scroll .actions {flex-direction:column;align-items:flex-start;flex-wrap:nowrap;gap:8px}
+.suppliers-page > .table-scroll .actions button {max-width:100%;white-space:normal;overflow-wrap:anywhere;scroll-margin-inline:4px}
+@media(max-width:700px) {
+  .suppliers-page > .table-scroll {--supplier-column-width:140px}
+  .suppliers-page > .table-scroll .actions {align-items:flex-end}
+  .suppliers-page > .table-scroll .actions button {max-width:calc(100vw - 200px)}
+}
+
 .evaluations-page .evaluations-scroll-hint {margin:0 0 8px;font-size:12px}
 .evaluations-page .table-scroll {--project-column-width:220px;scroll-padding-inline:calc(var(--project-column-width) + 8px) 8px}
 .workspace-section .evaluations-page .table-scroll table {table-layout:fixed;min-width:calc(var(--project-column-width) + 780px)}
