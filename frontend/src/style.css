@@ -835,6 +835,20 @@ dialog::backdrop { background:#0006; }
 .decision-report .report-ai-criteria article {min-width:0;padding:16px;border:1px solid #e5e9f4;border-radius:4px;background:white}
 .decision-report .report-ai-criteria h4 {margin:0 0 8px}
 .decision-report .report-ai-criteria p {margin:8px 0 0}
+.decision-report .report-evidence, .decision-report .report-eligibility {margin:24px 0;padding-top:20px;border-top:1px solid #e5e9f4;overflow-wrap:anywhere}
+.decision-report .report-evidence h3, .decision-report .report-eligibility h3 {margin:0 0 16px}
+.decision-report .report-evidence-note {padding:12px 16px;background:#eff4ff;border-left:3px solid #2862e9}
+.decision-report .report-evidence article {min-width:0;margin:16px 0;padding:16px;border:1px solid #e5e9f4;border-radius:4px;background:white}
+.decision-report .report-evidence h4 {margin:0 0 12px}
+.decision-report .report-evidence dl {margin:0 0 16px}
+.decision-report .report-evidence dl > div {display:grid;grid-template-columns:minmax(0,140px) minmax(0,1fr);gap:8px;margin:8px 0}
+.decision-report .report-evidence dd {min-width:0;margin:0;overflow-wrap:anywhere}
+.decision-report .report-evidence button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.decision-report .report-eligibility ul {list-style:none;padding:0;margin:0}
+.decision-report .report-eligibility li {padding:12px 16px;border:1px solid #e5e9f4;border-radius:4px;background:white;margin:8px 0}
+@media(max-width:600px) {
+  .decision-report .report-evidence dl > div {grid-template-columns:1fr;gap:2px}
+}
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
 .decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }

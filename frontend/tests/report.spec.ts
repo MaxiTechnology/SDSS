@@ -64,6 +64,49 @@ test('report errors remain visible outside the summary and disable PDF download'
  await expect(page.getByRole('button',{name:'Back to Decision'})).toBeEnabled();
 });
 
+for(const width of [1440,320])test(`saved evidence and eligibility remain readable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:800});
+ const long=`Synthetic${'LongFilename'.repeat(7)}`,hash='abcdef0123456789'.repeat(4);
+ const files=[
+  {id:'f1',supplier_id:'s1',supplier_name:'Supplier A',filename:`${long}.pdf`,check_name:'Certificate',size_bytes:12345,sha256:hash,created_at:'2026-11-18T12:34:56Z',uploaded_by:'Historical Reviewer'},
+  {id:'f2',supplier_id:'s2',supplier_name:'Supplier B',filename:'evidence.txt',check_name:null,size_bytes:18,sha256:'a'.repeat(64),created_at:'2026-11-17T00:00:00Z',uploaded_by:'Another Reviewer'}
+ ];
+ const notes=['Mandatory maximum price: 1000.00','Supplier A: eligible. Reviewer: Historical Reviewer. Reviewed: 2026-11-18T12:34:56Z.','Certificate: passed. Checked certificate.','Supplier B: pending. Reviewer: No evidence review required. Reviewed: Not recorded.','Insurance: pending. Awaiting review.'];
+ let note:string|undefined='File metadata below was recorded at confirmation; later file changes do not alter this saved record.',currentFiles=files,currentNotes=notes,writes=0;
+ const downloads:string[]=[];
+ await page.route('**/api/workspace/**',route=>route.fulfill({json:{}}));
+ await page.route('**/api/projects**',route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  if(path.endsWith('/content')){downloads.push(path);return route.fulfill({contentType:'text/plain',body:'Synthetic evidence'});}
+  if(path.endsWith('/report'))return route.fulfill({json:{...report,evidence_note:note,evidence_files:currentFiles,eligibility_notes:currentNotes}});
+  return route.fulfill({json:{id:'p1',reference:'P1',name:'Test',currency:'USD'}});
+ });
+ await page.goto('/#/projects/p1/reports/d1');
+ const evidence=page.locator('.report-evidence'),eligibility=page.locator('.report-eligibility'),cards=evidence.locator('article');
+ await expect(evidence.getByRole('heading',{name:'Evidence files recorded with this decision'})).toBeVisible();
+ await expect(evidence.locator('.report-evidence-note')).toHaveText(note);
+ await expect(cards.locator('h4')).toHaveText(files.map(file=>file.filename));
+ await expect(cards.first().locator('dt')).toHaveText(['Supplier:','Requirement:','Size:','SHA-256:','Uploaded']);
+ await expect(cards.first().locator('dd')).toHaveText(['Supplier A','Certificate','12345 bytes',hash,'2026-11-18T12:34:56Z by Historical Reviewer']);
+ await expect(cards.nth(1).locator('dd')).toHaveText(['Supplier B','General supplier evidence','18 bytes','a'.repeat(64),'2026-11-17T00:00:00Z by Another Reviewer']);
+ await expect(eligibility.getByRole('heading',{name:'Eligibility at confirmation'})).toBeVisible();
+ await expect(eligibility.locator('li')).toHaveText(notes);
+ expect(await evidence.evaluate(el=>[el,...el.querySelectorAll('article,h4,dt,dd,button')].every(item=>item.scrollWidth<=item.clientWidth))).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await page.locator('.report-values .table-scroll').focus();await page.keyboard.press('Tab');
+ const first=cards.first().getByRole('button',{name:`Download saved evidence: ${files[0].filename}`,exact:true});
+ await expect(first).toBeFocused();expect(await first.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ await evidence.screenshot({path:`test-results/report-evidence-${width}.png`});
+ await eligibility.screenshot({path:`test-results/report-eligibility-${width}.png`});
+ const download=page.waitForEvent('download');await page.keyboard.press('Enter');expect((await download).suggestedFilename()).toBe(files[0].filename);
+ await page.keyboard.press('Tab');await expect(cards.nth(1).getByRole('button',{name:'Download saved evidence: evidence.txt'})).toBeFocused();
+ expect(downloads).toEqual(['/api/projects/p1/suppliers/s1/evidence/f1/content']);expect(writes).toBe(0);
+ note=undefined;currentFiles=[];currentNotes=report.eligibility_notes;await page.reload();
+ await expect(evidence.locator('.report-evidence-note')).toHaveText('Evidence attachment metadata was not recorded.');
+ await expect(cards).toHaveCount(0);await expect(eligibility.locator('li')).toHaveText(report.eligibility_notes);
+});
+
 for(const width of [1440,320])test(`saved AI assistance remains readable at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:800});
  const long=`Synthetic${'LongIdentifier'.repeat(12)}`;
