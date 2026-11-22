@@ -32,3 +32,51 @@ await page.getByRole('button',{name:'Review Supplier A',exact:true}).click();
 await expect(page.getByLabel('Determination for Certificate')).toHaveValue('passed');
 await page.screenshot({path:'test-results/eligibility.png',fullPage:true});
 });
+
+for(const width of [1440,320])test(`eligibility guidance, table and continuation remain clear at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ const stamp='2026-11-16T10:00:00Z';
+ const row={id:'s1',name:'Supplier A',updated_at:stamp,checks:{cert:{status:'passed',notes:'Reviewed'}},total_price:'90',price_status:'passed',eligibility:'eligible',revision:1,needs_review:false,reviewer:'Reviewer A',reviewed_at:stamp};
+ let ready=false,writes=0;
+ await page.route('**/api/projects**',route=>{
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  if(route.request().url().endsWith('/eligibility')){
+   return route.fulfill({json:{weight_method:'ahp',suppliers:[row,{...row,id:'s2',name:'Supplier B',eligibility:ready?'eligible':'pending',reviewer:null,reviewed_at:null}],mandatory_checks:ready?[]:[{id:'cert',name:'Certificate',requirement:'Valid certificate'}],maximum_price:ready?null:'100',currency:'USD',criteria_revision:1,eligible_count:ready?2:1,ready}});
+  }
+  return route.fulfill({json:{id:'p1',reference:'PRJ-T',name:'Test',currency:'USD'}});
+ });
+ await page.goto('/#/projects/p1/eligibility');
+ await expect(page.getByRole('heading',{name:'Supplier eligibility',exact:true})).toBeVisible();
+ await expect(page.getByText('1 eligible · 1 excluded or pending')).toBeVisible();
+ await expect(page.getByText('No mandatory requirements are configured.',{exact:false})).toHaveCount(0);
+ await expect(page.getByText('Missing or unreviewed requirements remain Pending.',{exact:false})).toBeVisible();
+ await expect(page.getByText('Review notes record the signed-in reviewer.',{exact:false})).toBeVisible();
+ const table=page.getByRole('region',{name:'Supplier eligibility table'});
+ const first=table.getByRole('row').filter({hasText:'Supplier A'});
+ await expect(first.getByRole('button',{name:'Review Supplier A'})).toBeVisible();
+ await expect(first.getByText('Reviewer A')).toBeVisible();
+ const localTime=await page.evaluate(value=>new Date(value).toLocaleString(),stamp);
+ await expect(first.locator('.review-meta')).toContainText(localTime);
+ const next=page.getByRole('button',{name:'Continue to Evaluation Matrix',exact:false});
+ await expect(next).toBeDisabled();
+ await expect(page.getByText('At least two suppliers must qualify before evaluation.')).toBeVisible();
+ if(width===320){await table.focus();await page.keyboard.press('ArrowRight');await expect.poll(()=>table.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);}
+ const refresh=page.getByRole('button',{name:'Refresh Reviews'});
+ ready=true;
+ await refresh.click();
+ await expect(page.getByText('No mandatory requirements are configured.',{exact:false})).toBeVisible();
+ await expect(page.getByText('Minimum eligible pool met.')).toBeVisible();
+ await expect(next).toBeEnabled();
+ await refresh.focus();await page.keyboard.press('Tab');await expect(next).toBeFocused();
+ expect(await next.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+ const layout=await page.locator('.eligibility-page').evaluate(el=>{
+  const nav=el.querySelector('.eligibility-navigation')!.getBoundingClientRect(),continuation=el.querySelector('.eligibility-continuation')!.getBoundingClientRect();
+  const buttons=Array.from(el.querySelectorAll('.eligibility-navigation button,.eligibility-continuation button'),button=>button.getBoundingClientRect());
+  return nav.bottom<continuation.top&&buttons.every((a,i)=>buttons.slice(i+1).every(b=>a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top));
+ });
+ expect(layout).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ if(width===320){await next.click();await expect(page).toHaveURL(/projects\/p1\/matrix$/);}
+ else{await page.getByRole('button',{name:'Back to AHP Weighting',exact:false}).click();await expect(page).toHaveURL(/projects\/p1\/weights\/ahp$/);}
+ expect(writes).toBe(0);
+});

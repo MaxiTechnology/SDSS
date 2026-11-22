@@ -671,6 +671,20 @@ dialog::backdrop { background:#0006; }
 .ai-weighting .weighting-methods button, .ai-weighting .ai-request button, .ai-weighting .ai-save-actions button, .ai-weighting .weighting-continue button {max-width:100%}
 
 .eligibility-page .review-meta {display:block;margin-top:8px;font-size:11px}
+.eligibility-page > .card-heading {align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.eligibility-page > .card-heading h2 {margin:0}
+.eligibility-page .eligibility-guidance {margin-bottom:20px}
+.eligibility-page .eligibility-guidance > p {margin:0 0 8px}
+.eligibility-page .eligibility-guidance > .eligibility-no-requirements {display:block;margin:12px 0 0;border-left:3px solid #779eff}
+.eligibility-page .eligibility-table {min-width:720px}
+.eligibility-page .eligibility-table th {padding:12px 16px}
+.eligibility-page .eligibility-table td {padding:14px 16px;vertical-align:middle;border-bottom:1px solid #e5e9f4;white-space:normal;overflow-wrap:anywhere}
+.eligibility-page .eligibility-table td p {margin:6px 0 0}
+.eligibility-page .eligibility-table button {max-width:100%}
+.eligibility-page .eligibility-navigation {margin-top:24px;gap:12px}
+.eligibility-page .eligibility-continuation {margin-top:24px;padding-top:20px;border-top:1px solid #f1f3fa}
+.eligibility-page .eligibility-continuation p {margin:0 0 12px}
+.eligibility-page .eligibility-navigation button, .eligibility-page .eligibility-continuation button {max-width:100%}
 .eligibility-page .status-eligible {background:#ecfdf5;color:#047857}
 .eligibility-page .status-ineligible {background:#fff1f2;color:#b91c1c}
 .eligibility-page .status-pending {background:#fff7ed;color:#9a3412}
