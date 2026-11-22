@@ -768,6 +768,29 @@ dialog::backdrop { background:#0006; }
 .rankings-page .rankings-analysis h3 {margin:0 0 12px}
 .rankings-page .rankings-navigation button, .rankings-page .rankings-analysis button, .rankings-page .rankings-continuation button {max-width:100%}
 
+.sensitivity-page .sensitivity-guidance {display:block}
+.sensitivity-page .sensitivity-guidance p {margin:0;overflow-wrap:anywhere}
+.sensitivity-page .sensitivity-guidance p + p {margin-top:8px}
+.sensitivity-page .sensitivity-weights {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:16px}
+.sensitivity-page .sensitivity-weights label {display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.sensitivity-page .sensitivity-weight-input {display:flex;align-items:baseline;gap:8px;margin-top:auto}
+.sensitivity-page .sensitivity-weight-input input {flex:1}
+.sensitivity-page .sensitivity-simulation {margin-top:20px}
+.sensitivity-page .sensitivity-simulation p {margin:0 0 12px}
+.sensitivity-page .sensitivity-simulation .actions {gap:12px}
+.sensitivity-page .sensitivity-result, .sensitivity-page .sensitivity-history, .sensitivity-page .sensitivity-navigation {margin-top:24px;padding-top:20px;border-top:1px solid #f1f3fa}
+.sensitivity-page .sensitivity-save {margin-top:20px}
+.sensitivity-page .sensitivity-save label {margin-bottom:16px}
+.sensitivity-page .sensitivity-scenarios {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-top:16px}
+.sensitivity-page .sensitivity-scenario {min-width:0;padding:16px;border:1px solid #e5e9f4;border-radius:4px;background:white;overflow-wrap:anywhere}
+.sensitivity-page .sensitivity-scenario h4 {margin:0 0 8px}
+.sensitivity-page .sensitivity-scenario p {margin:0 0 8px}
+.sensitivity-page .sensitivity-scenario h5 {margin:16px 0 6px}
+.sensitivity-page .sensitivity-scenario ul {margin:0;padding-left:20px}
+.sensitivity-page .sensitivity-scenario li {margin:4px 0}
+.sensitivity-page .sensitivity-scenario button {margin-top:16px}
+.sensitivity-page button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
+
 .decision-report p { overflow-wrap:anywhere; }
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
