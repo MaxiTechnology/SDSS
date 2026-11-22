@@ -714,6 +714,24 @@ dialog::backdrop { background:#0006; }
 }
 
 .matrix-cell-error { display:block; color:#b42318; font-size:12px; margin-top:6px; }
+.matrix-page .matrix-scroll-hint {margin:16px 0 8px;font-size:12px}
+.matrix-page .matrix-table {--supplier-column-width:180px;scroll-padding-inline:calc(var(--supplier-column-width) + 8px) 8px}
+.matrix-page .matrix-table th, .matrix-page .matrix-table td {white-space:normal;overflow-wrap:anywhere}
+.matrix-page .matrix-table th:not(:first-child), .matrix-page .matrix-table td:not(:first-child) {min-width:200px}
+.matrix-page .matrix-table th:first-child, .matrix-page .matrix-table td:first-child {position:sticky;left:0;width:var(--supplier-column-width);min-width:var(--supplier-column-width);max-width:var(--supplier-column-width)}
+.matrix-page .matrix-table th:first-child {z-index:3;background:#eff4ff}
+.matrix-page .matrix-table td:first-child {z-index:2;background:white}
+.matrix-page .matrix-table input {scroll-margin-inline:4px}
+.matrix-page .matrix-navigation, .matrix-page .matrix-save, .matrix-page .matrix-calculation {margin-top:24px}
+.matrix-page .matrix-navigation {gap:12px}
+.matrix-page .matrix-save, .matrix-page .matrix-calculation {padding-top:20px;border-top:1px solid #f1f3fa}
+.matrix-page .matrix-calculation .info {margin:0 0 12px}
+.matrix-page .matrix-navigation button, .matrix-page .matrix-save button, .matrix-page .matrix-calculation button {max-width:100%}
+@media(max-width:700px) {
+  .matrix-page .matrix-table {--supplier-column-width:120px}
+  .matrix-page .matrix-table th:not(:first-child), .matrix-page .matrix-table td:not(:first-child) {width:160px;min-width:160px;max-width:160px}
+  .matrix-page .matrix-table input {max-width:140px}
+}
 
 .decision-report p { overflow-wrap:anywhere; }
 

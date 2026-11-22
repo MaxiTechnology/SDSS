@@ -24,6 +24,8 @@ for(const width of [375,768])test(`navigation, forms, tables and review dialog f
  const project={id:'p1',reference:'PRJ-T',name:'Synthetic purchasing project with a long descriptive name',currency:'USD',category:'IT & Hardware',estimated_budget:null,target_date:null,description:'Synthetic demonstration',status:'Draft',workflow_status:'Approved',workflow_stage:'Decision',supplier_count:3,updated_at:'2026-11-18T10:00:00Z',last_activity_at:'2026-11-18T10:00:00Z',decision_id:'d1',resume_path:'/projects/p1/decision'};
  const criteria=[{id:'price',name:'Price / Total Purchasing Cost',unit:'USD',direction:'cost',selected:true,minimum:'0',maximum:null},{id:'quality',name:'Product or Service Quality',unit:'points / 100',direction:'benefit',selected:true,minimum:'0',maximum:'100'}];
  const supplier={id:'s1',name:'Synthetic Supplier A',updated_at:project.updated_at,checks:{cert:{status:'pending',notes:''}},total_price:null,price_status:'pending',eligibility:'pending',revision:0,evidence_revision:0,needs_review:false,reviewer:null,reviewed_at:null};
+ await page.route('**/api/workspace/**',route=>route.fulfill({json:{}}));
+ await page.route('**/api/auth/users',route=>route.fulfill({json:[]}));
  await page.route('**/api/projects**',async route=>{
  const url=new URL(route.request().url()),path=url.pathname;
  if(path==='/api/projects')return route.fulfill({json:[project]});
