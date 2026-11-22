@@ -33,6 +33,51 @@ test('criteria templates preserve capture retries, preview confirmation and appl
  await page.getByRole('button',{name:'Preview and Apply',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByLabel('Target project',{exact:true}).selectOption('p2');await dialog.getByRole('button',{name:'Load Application Preview',exact:true}).click();await expect(dialog.getByRole('button',{name:'Apply as Draft',exact:true})).toBeDisabled();await expect(dialog).toContainText('Saved decision reports remain unchanged.');await dialog.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights.").check();await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('Apply response uncertain');await dialog.getByRole('button',{name:'Apply as Draft',exact:true}).click();await expect(dialog).not.toBeVisible();expect(appliedIds[0]).toBe(appliedIds[1]);await expect(page.getByRole('button',{name:'Open draft weights',exact:true})).toBeVisible();
 });
 
+for(const viewport of [{width:1440,height:850},{width:320,height:850},{width:320,height:320}])test(`template application dialog layout and focus at ${viewport.width}x${viewport.height}`,async({page})=>{
+ await page.setViewportSize(viewport);
+ const longTemplate={...template,id:'t2',name:`Synthetic template ${'LongName'.repeat(12)}`};
+ let releasePreview:()=>void=()=>{},writes=0,previewStarted=false;
+ const previewGate=new Promise<void>(resolve=>{releasePreview=resolve;});
+ await page.route('**/api/**',route=>{if(route.request().url().endsWith('/api/auth/session'))return route.fallback();if(route.request().method()!=='GET')writes++;return route.abort();});
+ await page.route('**/api/workspace/templates**',async route=>{
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  if(new URL(route.request().url()).pathname.endsWith('/preview')){previewStarted=true;await previewGate;return route.fulfill({json:{project_id:'p2',project_name:`Target ${'LongName'.repeat(12)}`,project_updated_at:stamp,criteria_revision:0,weight_revision:0,template:longTemplate}});}
+  return route.fulfill({json:{projects,templates:[template,longTemplate]}});
+ });
+ await page.route('**/api/projects',route=>route.fulfill({json:[]}));
+ await page.goto('/#/criteria');
+ const opener=page.locator('.template-card').nth(1).getByRole('button',{name:'Preview and Apply'}),dialog=page.getByRole('dialog',{name:'Preview template application'});
+ const close=dialog.getByRole('button',{name:'Close dialog'}),target=dialog.getByLabel('Target project'),load=dialog.getByRole('button',{name:'Load Application Preview'}),cancel=dialog.getByRole('button',{name:'Cancel'});
+ await opener.click();await expect(close).toBeFocused();await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();
+ await opener.click();await close.click();await expect(opener).toBeFocused();
+ await opener.click();await cancel.click();await expect(opener).toBeFocused();
+ await opener.click();await target.selectOption('p2');await load.click();await expect.poll(()=>previewStarted).toBe(true);
+ await expect(close).toBeDisabled();await expect(target).toBeDisabled();await expect(load).toBeDisabled();await expect(cancel).toBeDisabled();await page.keyboard.press('Escape');await expect(dialog).toBeVisible();
+ releasePreview();
+ const table=dialog.getByRole('region',{name:`Criteria in ${longTemplate.name}`}),confirm=dialog.getByLabel("I reviewed this preview and want to replace this project's criteria and draft weights."),apply=dialog.getByRole('button',{name:'Apply as Draft'});
+ await expect(table).toBeVisible();await expect(apply).toBeDisabled();
+ await expect(dialog.getByText("This replaces the project's criteria",{exact:false})).toBeVisible();
+ const body=dialog.locator('.dialog-body'),heading=dialog.locator('.dialog-heading'),footer=dialog.locator('.dialog-footer');
+ await body.evaluate(el=>{el.scrollTop=0;});
+ const top=await heading.boundingBox(),bottom=await footer.boundingBox();expect(top).not.toBeNull();expect(bottom).not.toBeNull();
+ expect(await body.evaluate(el=>el.scrollHeight>el.clientHeight)).toBe(true);
+ if(viewport.height===850)await dialog.screenshot({path:`test-results/template-application-${viewport.width}-top.png`});
+ await body.evaluate(el=>{el.scrollTop=el.scrollHeight;});
+ const topAfter=await heading.boundingBox(),bottomAfter=await footer.boundingBox();
+ expect(topAfter!.y).toBeCloseTo(top!.y,0);expect(bottomAfter!.y).toBeCloseTo(bottom!.y,0);
+ expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ expect(await dialog.locator('.template-application-details h3').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+ if(viewport.height===850)await dialog.screenshot({path:`test-results/template-application-${viewport.width}-bottom.png`});
+ await close.focus();
+ for(const control of [target,load,table,confirm,cancel]){
+  await page.keyboard.press('Tab');await expect(control).toBeFocused();
+  expect(await control.evaluate(el=>{const box=el.getBoundingClientRect(),dialog=el.closest('dialog')!.getBoundingClientRect(),body=el.closest('.dialog-body')?.getBoundingClientRect();return getComputedStyle(el).outlineStyle!=='none'&&box.top>=(body?.top??dialog.top)-1&&box.bottom<=(body?.bottom??dialog.bottom)+1;})).toBe(true);
+ }
+ await page.keyboard.press('Tab');await expect(close).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(cancel).toBeFocused();
+ await confirm.check();await expect(apply).toBeEnabled();await apply.focus();await page.keyboard.press('Tab');await expect(close).toBeFocused();await page.keyboard.press('Shift+Tab');await expect(apply).toBeFocused();
+ await page.keyboard.press('Escape');await expect(dialog).not.toBeVisible();await expect(opener).toBeFocused();expect(writes).toBe(0);
+});
+
 for(const width of [1440,320])test(`template configuration scrolling in list and preview at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:850});
  let longUnit=false,writes=0;

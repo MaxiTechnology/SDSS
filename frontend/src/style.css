@@ -1107,6 +1107,21 @@ aside { overflow-y: auto; }
 .template-create .template-create-group legend {font-size:16px;font-weight:600}
 .template-create .template-create-group label {overflow-wrap:anywhere}
 .template-create .template-create-group .inline-check {margin-bottom:0}
+.template-application-dialog[open] {display:flex;flex-direction:column;max-height:calc(100dvh - 24px);overflow:hidden}
+.template-application-dialog .dialog-heading,.template-application-dialog .dialog-footer {flex:none;gap:12px}
+.template-application-dialog .dialog-heading h2 {margin:0;min-width:0;overflow-wrap:anywhere}
+.template-application-dialog .dialog-heading button {flex:none}
+.template-application-dialog .dialog-body {flex:1 1 auto;min-height:0;margin:0;overflow-y:auto;overscroll-behavior:contain;scroll-padding-block:12px;overflow-wrap:anywhere}
+.template-application-dialog .template-application-target label {margin:0 0 16px}
+.template-application-dialog .template-application-details,.template-application-dialog .template-application-confirmation {margin-top:24px}
+.template-application-dialog .template-application-details h3 {overflow-wrap:anywhere}
+.template-application-dialog .template-application-confirmation .info {font-size:13px;line-height:1.5;margin:0}
+.template-application-dialog .template-application-confirmation .inline-check {margin:12px 0 0}
+.template-application-dialog .dialog-footer {flex-wrap:wrap}
+.template-application-dialog .dialog-footer .primary {margin-left:auto}
+@media(max-height:450px) {
+  .template-application-dialog .dialog-heading,.template-application-dialog .dialog-footer {padding:12px 16px}
+}
 .template-create .template-source-selection {margin:-8px 0 16px;overflow-wrap:anywhere}
 .template-create .template-weights-help {margin:8px 0 0 28px}
 .template-create .template-create-actions {margin-top:24px;padding-top:20px;border-top:1px solid #e5e9f4}
