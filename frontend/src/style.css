@@ -825,6 +825,16 @@ dialog::backdrop { background:#0006; }
 @media(max-width:600px) {
   .decision-report .report-project dl > div {grid-template-columns:1fr;gap:2px}
 }
+.decision-report .report-ai {margin:24px 0;padding-top:20px;border-top:1px solid #e5e9f4;overflow-wrap:anywhere}
+.decision-report .report-ai h3 {margin:0 0 16px}
+.decision-report .report-ai-block {margin:16px 0}
+.decision-report .report-ai-block h4 {margin:0 0 6px}
+.decision-report .report-ai-block p {margin:0}
+.decision-report .report-ai-guidance {padding:12px 16px;background:#eff4ff;border-left:3px solid #2862e9}
+.decision-report .report-ai-criteria {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px;margin-top:16px}
+.decision-report .report-ai-criteria article {min-width:0;padding:16px;border:1px solid #e5e9f4;border-radius:4px;background:white}
+.decision-report .report-ai-criteria h4 {margin:0 0 8px}
+.decision-report .report-ai-criteria p {margin:8px 0 0}
 
 .decision-page .inline-check { display:flex; align-items:center; gap:10px; }
 .decision-page .inline-check input[type=checkbox] { width:18px; height:18px; flex:none; }

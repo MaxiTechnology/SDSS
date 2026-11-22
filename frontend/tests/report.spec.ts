@@ -64,6 +64,38 @@ test('report errors remain visible outside the summary and disable PDF download'
  await expect(page.getByRole('button',{name:'Back to Decision'})).toBeEnabled();
 });
 
+for(const width of [1440,320])test(`saved AI assistance remains readable at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:800});
+ const long=`Synthetic${'LongIdentifier'.repeat(12)}`;
+ const assistance={provider:'Synthetic provider',model:long,priorities:`Priorities ${long}`,summary:`Summary ${long}`,review_notes:`Review ${long}`,weights:{price:'60.1250',quality:'39.8750'},rationales:{price:`Price explanation ${long}`,quality:'Quality explanation'}};
+ let current:typeof assistance|null=assistance,writes=0,aiRequests=0;
+ await page.route('**/api/workspace/**',route=>route.fulfill({json:{}}));
+ await page.route('**/api/projects**',route=>{
+  const path=new URL(route.request().url()).pathname;
+  if(route.request().method()!=='GET'){writes++;return route.abort();}
+  if(path.includes('/ai')){aiRequests++;return route.abort();}
+  if(path.endsWith('/report'))return route.fulfill({json:{...report,ai_assistance:current}});
+  return route.fulfill({json:{id:'p1',reference:'P1',name:'Test',currency:'USD'}});
+ });
+ await page.goto('/#/projects/p1/reports/d1');
+ const section=page.locator('.report-ai');
+ await expect(section.getByRole('heading',{name:'AI assistance — reviewed by a human'})).toBeVisible();
+ await expect(section.locator('.report-ai-block h4')).toHaveText(['Provider and model','Purchasing priorities sent:','Saved explanation','Review notes:']);
+ await expect(section.locator('.report-ai-block p')).toHaveText([`${assistance.provider} · ${assistance.model}`,assistance.priorities,assistance.summary,assistance.review_notes]);
+ await expect(section.locator('.report-ai-guidance')).toHaveText('These explanations describe the original suggestions; the approved weights may have been adjusted.');
+ await expect(section.locator('article h4')).toHaveText(['Total price','Quality']);
+ await expect(section.locator('article').nth(0).locator('p')).toHaveText(['Original AI weight: 60.1250% · Approved weight: 50%',assistance.rationales.price]);
+ await expect(section.locator('article').nth(1).locator('p')).toHaveText(['Original AI weight: 39.8750% · Approved weight: 50%',assistance.rationales.quality]);
+ expect(await section.evaluate(el=>[el,...el.querySelectorAll('p,h3,h4,article')].every(item=>item.scrollWidth<=item.clientWidth))).toBe(true);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await section.screenshot({path:`test-results/report-ai-${width}.png`});
+ current={...assistance,review_notes:''};await page.reload();
+ await expect(section.getByText('No additional review notes.',{exact:true})).toBeVisible();
+ current=null;await page.reload();await expect(section).toHaveCount(0);
+ await expect(page.getByRole('heading',{name:'Evidence files recorded with this decision'})).toBeVisible();
+ expect(writes).toBe(0);expect(aiRequests).toBe(0);
+});
+
 for(const width of [1440,320])test(`saved report detail sections remain readable at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:800});
  const longSupplier=`Supplier ${'LongName'.repeat(12)}`,longCriterion=`Criterion ${'LongName'.repeat(12)}`;
