@@ -12,5 +12,26 @@ export function Accounts(){
 <section className="accounts-list"><h2>Existing accounts</h2><button className="secondary" disabled={busy} onClick={()=>void load()}>Refresh Accounts</button><div className="table-card table-scroll" role="region" aria-label="User accounts table" tabIndex={0}><table><thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td>{row.display_name}</td><td>{row.username}</td><td>{roleName(row.role)}</td><td><span className="chip account-status" data-status={row.active?'active':'disabled'}>{row.active?'Active':'Disabled'}</span>{row.must_change?' · Initial password':''}</td><td><button className="secondary" disabled={busy||state.loading||!!state.error} onClick={()=>{setSelected({...row});setReset('');setError('');}}>Edit {row.username}</button></td></tr>)}</tbody></table></div></section>
 
  {selected&&<form className="project-form account-editor" onSubmit={save}><h2>Edit {selected.username}</h2><p>Role, name or status changes end this account’s current sessions. At least one administrator must remain active.</p><fieldset disabled={busy}><label>Display name<input required maxLength={100} value={selected.display_name} onChange={e=>setSelected({...selected,display_name:e.target.value})}/></label><label>Account role<select aria-label="Account role" value={selected.role} onChange={e=>setSelected({...selected,role:e.target.value as User['role']})}>{roles.map(role=><option key={role} value={role}>{roleName(role)}</option>)}</select></label><label className="inline-check"><input type="checkbox" checked={selected.active} onChange={e=>setSelected({...selected,active:e.target.checked})}/>Account active</label><div className="actions"><button className="primary">Save Account</button><button type="button" className="secondary" onClick={()=>{setSelected(null);setReset('');}}>Cancel Account Edit</button></div>{selected.id!==user.id&&<><h3>Reset this account’s password</h3><label>New initial password<input type="password" autoComplete="new-password" minLength={15} maxLength={128} value={reset} onChange={e=>setReset(e.target.value)}/></label><button type="button" className="secondary" disabled={reset.length<15} onClick={()=>void resetPassword()}>Reset Initial Password</button></>}</fieldset></form>}
- <form className="project-form account-editor" onSubmit={create}><h2>Create account</h2><p>Choose an initial password of 15–128 characters. Share it privately with the user.</p><fieldset disabled={busy}><div className="fields"><label>New username<input required minLength={3} maxLength={80} autoComplete="off" value={username} onChange={e=>setUsername(e.target.value)}/></label><label>New display name<input required maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label><label>New account role<select aria-label="New account role" value={role} onChange={e=>setRole(e.target.value as User['role'])}>{roles.map(role=><option key={role} value={role}>{roleName(role)}</option>)}</select></label><label>Initial password<input type="password" required minLength={15} maxLength={128} autoComplete="new-password" value={password} onChange={e=>setPassword(e.target.value)}/></label><label>Confirm initial password<input type="password" required minLength={15} maxLength={128} autoComplete="new-password" value={confirm} onChange={e=>setConfirm(e.target.value)}/></label></div><button className="primary">Create Account</button></fieldset></form></section>;
+ <form className="project-form account-editor account-create" onSubmit={create}>
+  <h2>Create account</h2>
+  <fieldset disabled={busy}>
+   <fieldset className="account-create-group">
+    <legend>Account details</legend>
+    <div className="fields">
+     <label>New username<input required minLength={3} maxLength={80} autoComplete="off" value={username} onChange={e=>setUsername(e.target.value)}/></label>
+     <label>New display name<input required maxLength={100} value={name} onChange={e=>setName(e.target.value)}/></label>
+     <label>New account role<select aria-label="New account role" value={role} onChange={e=>setRole(e.target.value as User['role'])}>{roles.map(role=><option key={role} value={role}>{roleName(role)}</option>)}</select></label>
+    </div>
+   </fieldset>
+   <fieldset className="account-create-group">
+    <legend>Initial password</legend>
+    <p>Choose an initial password of 15–128 characters. Share it privately with the user.</p>
+    <div className="fields">
+     <label>Initial password<input type="password" required minLength={15} maxLength={128} autoComplete="new-password" value={password} onChange={e=>setPassword(e.target.value)}/></label>
+     <label>Confirm initial password<input type="password" required minLength={15} maxLength={128} autoComplete="new-password" value={confirm} onChange={e=>setConfirm(e.target.value)}/></label>
+    </div>
+   </fieldset>
+   <div className="account-create-actions"><button className="primary">Create Account</button></div>
+  </fieldset>
+ </form></section>;
 }

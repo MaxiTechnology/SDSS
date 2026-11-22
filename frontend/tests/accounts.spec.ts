@@ -52,3 +52,35 @@ for(const width of [1440,320])test(`account list remains readable and accessible
  await expect(page.getByRole('heading',{name:'Edit disabled-user',exact:true})).toBeVisible();
  expect(reads).toBeGreaterThan(0);expect(writes).toBe(0);
 });
+
+for(const width of [1440,320])test(`create account groups and keyboard order at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:850});
+ let writes=0;
+ await page.route('**/api/auth/users**',route=>{if(route.request().method()!=='GET'){writes++;return route.abort();}return route.fulfill({json:{users:[]}});});
+ await page.goto('/#/accounts');
+ const form=page.locator('form.account-create'),details=form.getByRole('group',{name:'Account details'}),initial=form.getByRole('group',{name:'Initial password'});
+ const username=details.getByLabel('New username',{exact:true}),name=details.getByLabel('New display name',{exact:true}),role=details.getByLabel('New account role',{exact:true});
+ const initialField=initial.getByLabel('Initial password',{exact:true}),confirmation=initial.getByLabel('Confirm initial password',{exact:true}),submit=form.getByRole('button',{name:'Create Account'});
+ await expect(form.getByRole('heading',{name:'Create account'})).toBeVisible();
+ await expect(initial.getByText('Choose an initial password of 15–128 characters. Share it privately with the user.')).toBeVisible();
+ await expect(role).toHaveValue('officer');
+ await expect(username).toHaveAttribute('required','');await expect(username).toHaveAttribute('minlength','3');await expect(username).toHaveAttribute('maxlength','80');await expect(username).toHaveAttribute('autocomplete','off');
+ await expect(name).toHaveAttribute('required','');await expect(name).toHaveAttribute('maxlength','100');
+ for(const field of [initialField,confirmation]){
+  await expect(field).toHaveAttribute('type','password');await expect(field).toHaveAttribute('required','');
+  await expect(field).toHaveAttribute('minlength','15');await expect(field).toHaveAttribute('maxlength','128');await expect(field).toHaveAttribute('autocomplete','new-password');
+ }
+ const bounds=await Promise.all([username,name,role,initialField,confirmation,submit].map(field=>field.boundingBox()));
+ expect(bounds.every(box=>box!==null)).toBe(true);
+ if(width===320){
+  for(let i=1;i<5;i++)expect(bounds[i]!.y).toBeGreaterThanOrEqual(bounds[i-1]!.y+bounds[i-1]!.height);
+ }else{
+  expect(bounds[0]!.y).toBe(bounds[1]!.y);expect(bounds[3]!.y).toBe(bounds[4]!.y);
+ }
+ expect(bounds[5]!.y).toBeGreaterThan(bounds[4]!.y+bounds[4]!.height);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-innerWidth)).toBeLessThanOrEqual(1);
+ await form.screenshot({path:`test-results/account-create-${width}.png`});
+ await username.focus();
+ for(const field of [name,role,initialField,confirmation,submit]){await page.keyboard.press('Tab');await expect(field).toBeFocused();expect(await field.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');}
+ expect(writes).toBe(0);
+});
