@@ -1,4 +1,13 @@
 let csrfToken:string|null=null;
+export const recommendationStoragePrefix='sdss-recommendations:';
+function clearStoredRecommendations(){
+  try{
+    for(let index=sessionStorage.length-1;index>=0;index--){
+      const key=sessionStorage.key(index);
+      if(key?.startsWith(recommendationStoragePrefix))sessionStorage.removeItem(key);
+    }
+  }catch(error){console.warn('Could not clear recommendation storage.',error);}
+}
 export function setCsrfToken(value:string|null){csrfToken=value;}
 export class ApiError extends Error { constructor(message:string,public status:number){super(message);} }
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -34,9 +43,12 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     );
   }
   if(!['GET','HEAD','OPTIONS'].includes((options?.method??'GET').toUpperCase()))window.dispatchEvent(new Event('sdss-data-changed'));
+  if(path==='/api/auth/logout'){clearStoredRecommendations();window.dispatchEvent(new Event('sdss-signed-out'));}
   if (r.status === 204) return undefined as T;
   try {
-    return await r.json();
+    const result=await r.json();
+    if(path==='/api/auth/login'||(path==='/api/auth/session'&&!result?.user))clearStoredRecommendations();
+    return result;
   } catch {
     throw Error("The server returned an unreadable response. Please try again.");
   }

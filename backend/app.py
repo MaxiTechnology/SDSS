@@ -669,6 +669,126 @@ def get_ranking(project_id: UUID):
     return ranking_json(row,context,revision)
 
 
+@app.post('/api/projects/{project_id}/rankings/recommendation')
+def generate_ranking_recommendation(project_id: UUID):
+    import cloudflare_ai
+    import recommendation
+
+    with database.connect() as connection:
+        require_project(connection, project_id)
+        project = connection.execute(
+            'SELECT category,currency FROM purchasing_projects WHERE id=%s',
+            (project_id,),
+        ).fetchone()
+        criteria, suppliers, selected, context = matrix_context(connection, project_id)
+        matrix = connection.execute(
+            'SELECT * FROM project_matrix WHERE project_id=%s',
+            (project_id,),
+        ).fetchone()
+        row = connection.execute(
+            'SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',
+            (project_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, 'No rankings yet. Complete the matrix and calculate rankings.')
+        current = ranking_json(row, context, matrix['revision'] if matrix else 0)
+        if current['stale']:
+            raise HTTPException(409, 'The ranking changed. Calculate current rankings before requesting AI analysis.')
+        snapshot = row['snapshot']
+        scenario_rows = connection.execute(
+            'SELECT snapshot FROM sensitivity_scenarios '
+            'WHERE project_id=%s AND baseline_id=%s ORDER BY created_at,id',
+            (project_id, row['id']),
+        ).fetchall()
+        sensitivity_scenarios = [scenario['snapshot'] for scenario in scenario_rows]
+
+    try:
+        ai_result, context_data = recommendation.generate_recommendation(
+            project,
+            snapshot,
+            sensitivity_scenarios,
+        )
+    except cloudflare_ai.AIConnectionError as error:
+        raise HTTPException(503, str(error)) from None
+
+    # Recheck all ranking inputs after the external provider call.
+    with database.connect() as connection:
+        latest_context_criteria, latest_suppliers, latest_selected, latest_context = matrix_context(
+            connection,
+            project_id,
+        )
+        latest_matrix = connection.execute(
+            'SELECT * FROM project_matrix WHERE project_id=%s',
+            (project_id,),
+        ).fetchone()
+        latest_row = connection.execute(
+            'SELECT * FROM ranking_runs WHERE project_id=%s ORDER BY created_at DESC,id DESC LIMIT 1',
+            (project_id,),
+        ).fetchone()
+        if (
+            not latest_row
+            or not latest_matrix
+            or latest_row['id'] != row['id']
+            or ranking_json(latest_row, latest_context, latest_matrix['revision'])['stale']
+        ):
+            raise HTTPException(409, 'The ranking changed while AI was responding. Generate the recommendation again.')
+
+    rows = snapshot['result']['rows']
+    leaders = [row_data for row_data in rows if row_data['rank'] == 1]
+    aliases = context_data['supplier_aliases']
+    reference_to_id = {alias: supplier_id for supplier_id, alias in aliases.items()}
+
+    if ai_result.recommendation_type == 'tie':
+        if len(leaders) != 1:
+            if ai_result.supplier_reference is not None:
+                raise HTTPException(422, 'The AI response conflicts with the tied TOPSIS result.')
+            recommended_supplier = None
+            ranking_position = None
+            score = None
+        else:
+            raise HTTPException(422, 'The AI response conflicts with the TOPSIS ranking.')
+    else:
+        if len(leaders) != 1:
+            raise HTTPException(422, 'A tied TOPSIS result must be described without selecting one supplier.')
+        supplier_id = reference_to_id.get(ai_result.supplier_reference)
+        if not supplier_id:
+            raise HTTPException(422, 'The AI response referenced an unknown supplier.')
+        recommended_row = next((row_data for row_data in rows if row_data['id'] == supplier_id), None)
+        if not recommended_row or recommended_row['rank'] != 1:
+            raise HTTPException(422, 'The AI response did not recommend the highest-ranked supplier.')
+        recommended_supplier = next(
+            (supplier for supplier in snapshot['suppliers'] if supplier['id'] == supplier_id),
+            None,
+        )
+        ranking_position = recommended_row['rank']
+        score = recommended_row['score']
+
+    next_rows = [row_data for row_data in rows if row_data['rank'] != 1]
+    next_row = sorted(next_rows, key=lambda row_data: (-Decimal(str(row_data['score'])), row_data['id']))[0] if next_rows else None
+    comparison_supplier = None
+    comparison_score = None
+    if next_row:
+        comparison_supplier = next(
+            (supplier['name'] for supplier in snapshot['suppliers'] if supplier['id'] == next_row['id']),
+            None,
+        )
+        comparison_score = next_row['score']
+
+    return {
+        'ranking_id': str(row['id']),
+        'ranking_stale': False,
+        'recommendation_type': ai_result.recommendation_type,
+        'recommended_supplier': recommended_supplier['name'] if recommended_supplier else None,
+        'ranking_position': ranking_position,
+        'topsis_score': score,
+        'next_best_supplier': comparison_supplier,
+        'next_best_score': comparison_score,
+        'key_reasons': ai_result.key_reasons,
+        'supplier_comparison': ai_result.supplier_comparison,
+        'decision': ai_result.decision,
+    }
+
+
 class SensitivityRequest(BaseModel):
     baseline_id: UUID
     weights: dict[str, Decimal] = Field(min_length=2, max_length=20)

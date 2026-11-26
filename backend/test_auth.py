@@ -19,6 +19,7 @@ def test_passwords_roles_and_origins(monkeypatch):
     for role in auth.ROLES:
         assert auth.permitted(role,'GET','/api/projects')
         assert auth.permitted(role,'POST','/api/projects/abc-123/decisions')==(role!='officer')
+        assert auth.permitted(role,'POST','/api/projects/abc-123/rankings/recommendation')
         assert auth.permitted(role,'PUT','/api/projects/abc-123/matrix')==(role!='approver')
         assert auth.permitted(role,'GET','/api/auth/users')==(role=='administrator')
     monkeypatch.setenv('SDSS_ALLOWED_ORIGINS','http://example.com')

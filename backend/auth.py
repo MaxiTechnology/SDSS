@@ -120,6 +120,7 @@ def permitted(role,method,path):
     if method in ('GET','HEAD','OPTIONS'):return role in ROLES
     if path in ('/api/auth/logout','/api/auth/change-password'):return role in ROLES
     if re.fullmatch(r'/api/projects/[0-9a-fA-F-]+/decisions',path) and method=='POST':return role in ('administrator','approver')
+    if re.fullmatch(r'/api/projects/[0-9a-fA-F-]+/rankings/recommendation',path) and method=='POST':return role in ROLES
     return role in ('administrator','officer') and (path.startswith('/api/projects') or path.startswith('/api/workspace/templates'))
 
 

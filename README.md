@@ -168,6 +168,14 @@ New confirmed decisions record provider/model, transmitted priorities/context, o
 
 Verification: strict output/schema tests, context allowlist checks, structured-provider-response regression, browser consent/unavailable retry/edits/total gate/approval/reload, and an isolated Neon API journey covering method switches, draft history, cross-project ownership, stale/concurrent requests, released network locks and report stability. A live Cloudflare request using synthetic two-criterion context returned a validated suggestion. AHP and the user's saved project/decision were not changed by verification. Restart the backend after migrating to load the new routes.
 
+## AI ranking recommendations
+
+After calculating a current TOPSIS ranking, an authorized user may request an optional AI explanation. The provider receives anonymous criterion references for verified advantages, their approved weights and applicable saved-scenario outcomes with anonymous references. Supplier names and IDs, criterion labels, raw and normalized evaluation values, ranking scores and free-text project or scenario details are not sent. The derived facts still convey relative performance, so use synthetic data for this demonstration.
+
+The model selects up to three anonymized criteria from locally verified, positively weighted advantages of the top supplier over the next-ranked eligible supplier. The backend identifies the supplier directly, validates the selected criteria and ensures a highest-weighted advantage is included before building explanations and trade-offs from the saved evaluation. It does not display free-form AI claims. Tied leaders are presented without choosing one. Responses may contain criterion references or complete candidate objects; echoed weights must match. A single JSON Markdown fence is accepted; malformed JSON, duplicate keys, unexpected fields and unsupported selections are rejected. Saved sensitivity outcomes are provided as anonymous context but are not included in the generated comparison.
+
+The recommendation does not change rankings or decisions. It is retained temporarily in the current browser tab's session storage, scoped to the signed-in user and ranking, and is cleared on sign-out or session expiry. This storage contains the displayed supplier names and advice, so use a trusted browser and sign out on shared devices. It is not permanent database storage and is lost when the tab's session ends. The ranking is checked before a cached recommendation is shown on page entry, refresh or window focus; changes made elsewhere are not pushed to an open, focused page. Refreshing or revisiting does not automatically call the AI. A provider failure leaves the final-decision workflow available.
+
 
 ## Dashboard and derived project statuses (SDSS-018)
 

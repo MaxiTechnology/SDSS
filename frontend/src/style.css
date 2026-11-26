@@ -883,6 +883,16 @@ dialog::backdrop { background:#0006; }
 .rankings-page .table-scroll th:first-child, .rankings-page .table-scroll td:first-child {width:64px;text-align:right;font-variant-numeric:tabular-nums}
 .rankings-page .table-scroll th:last-child, .rankings-page .table-scroll td:last-child {width:128px;text-align:right;font-variant-numeric:tabular-nums}
 .rankings-page .rankings-details, .rankings-page .rankings-navigation, .rankings-page .rankings-analysis, .rankings-page .rankings-continuation {margin-top:24px}
+.rankings-page .ai-recommendation {margin-top:24px;padding:20px;border:1px solid #dfe5f1;border-radius:12px;background:#fbfcff}
+.rankings-page .ai-recommendation h3 {margin:0 0 8px}
+.rankings-page .ai-recommendation h4 {margin:0 0 8px}
+.rankings-page .ai-recommendation-notice {margin:0 0 16px;color:#52617b}
+.rankings-page .ai-recommendation-content {display:grid;gap:10px;margin-top:12px}
+.rankings-page .ai-recommendation-content section {padding:12px;border:1px solid #edf0f7;border-radius:8px;background:#fff}
+.rankings-page .ai-recommendation-content p {margin:6px 0;overflow-wrap:anywhere}
+.rankings-page .ai-recommendation-content ul {margin:8px 0 0;padding-left:20px}
+.rankings-page .ai-recommendation-content li {margin:6px 0;overflow-wrap:anywhere}
+.rankings-page .ai-recommendation button {max-width:100%;white-space:normal}
 .rankings-page .rankings-details summary:focus-visible {outline:3px solid #779eff;outline-offset:3px}
 .rankings-page .rankings-analysis, .rankings-page .rankings-continuation {padding-top:20px;border-top:1px solid #f1f3fa}
 .rankings-page .rankings-analysis h3 {margin:0 0 12px}
